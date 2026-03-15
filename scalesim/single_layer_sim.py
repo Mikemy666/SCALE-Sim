@@ -264,6 +264,7 @@ class single_layer_sim:
 
             self.memory_system.set_params(
                     layer_id = self.layer_id,
+                    layer_name=self.topo.get_layer_name(self.layer_id),
                     word_size=word_size,
                     ifmap_buf_size_bytes=ifmap_buf_size_bytes,
                     filter_buf_size_bytes=filter_buf_size_bytes,
@@ -440,6 +441,46 @@ class single_layer_sim:
         items += [self.ofmap_dram_start_cycle, self.ofmap_dram_stop_cycle, self.ofmap_dram_writes]
 
         return items
+
+    #
+    def get_bank_utilization_items(self):
+        """
+        Return per-bank utilization stats for this layer.
+        """
+        if not self.report_items_ready:
+            self.calc_report_data()
+
+        return self.memory_system.get_bank_utilization_stats(total_sim_cycles=self.total_cycles)
+
+    #
+    def get_bank_conflict_stall_cycles(self):
+        """
+        Return aggregate bank conflict stalls for this layer.
+        """
+        if not self.report_items_ready:
+            self.calc_report_data()
+
+        return self.memory_system.get_bank_conflict_stall_cycles()
+
+    #
+    def get_bank_conflict_blocked_cycles(self):
+        """
+        Return aggregate per-cycle deduplicated bank conflict cycles for this layer.
+        """
+        if not self.report_items_ready:
+            self.calc_report_data()
+
+        return self.memory_system.get_bank_conflict_blocked_cycles()
+
+    #
+    def get_global_bank_conflict_stall_cycles(self):
+        """
+        Return globally attributed stall cycles caused by bank conflicts for this layer.
+        """
+        if not self.report_items_ready:
+            self.calc_report_data()
+
+        return self.memory_system.get_global_bank_conflict_stall_cycles()
 
     #
     def get_sparse_report_items(self):

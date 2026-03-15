@@ -48,6 +48,7 @@ class double_buffered_scratchpad:
         self.total_cycles = 0
         self.compute_cycles = 0
         self.stall_cycles = 0
+        self.global_bank_conflict_stall_cycles = 0
 
         self.avg_ifmap_dram_bw = 0
         self.avg_filter_dram_bw = 0
@@ -81,6 +82,7 @@ class double_buffered_scratchpad:
     #
     def set_params(self,
                    layer_id=0,
+                   layer_name='',
                    verbose=True,
                    estimate_bandwidth_mode=False,
                    word_size=1,
@@ -100,6 +102,13 @@ class double_buffered_scratchpad:
         self.config = config
         self.use_ramulator_trace = config.get_ramulator_trace()
 
+        enable_bank_model = self.config.get_enable_bank_model() if hasattr(self.config, 'get_enable_bank_model') else False
+        enable_moe_parallel_bank_arb = self.config.get_enable_moe_parallel_bank_arb() if hasattr(self.config, 'get_enable_moe_parallel_bank_arb') else False
+        enable_dynamic_bank_alloc = self.config.get_enable_dynamic_bank_alloc() if hasattr(self.config, 'get_enable_dynamic_bank_alloc') else False
+        total_mem_banks = self.config.get_num_bank() if hasattr(self.config, 'get_num_bank') else 16
+        # Use a shared IFMAP+FILTER bank pool for memory service arbitration.
+        total_read_banks = max(1, int(ifmap_sram_bank_num) + int(filter_sram_bank_num))
+
         self.estimate_bandwidth_mode = estimate_bandwidth_mode
 
         if self.estimate_bandwidth_mode:
@@ -111,7 +120,12 @@ class double_buffered_scratchpad:
                                       word_size=word_size,
                                       active_buf_frac=rd_buf_active_frac,
                                       backing_buf_default_bw=ifmap_backing_buf_bw,
-                                      use_ramulator_trace=self.use_ramulator_trace
+                                      use_ramulator_trace=self.use_ramulator_trace,
+                                      num_bank=total_read_banks,
+                                      enable_bank_model=enable_bank_model,
+                                      enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                                      enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                                      layer_name=layer_name
                                       )
 
             self.filter_buf.set_params(backing_buf_obj=self.filter_port,
@@ -119,7 +133,12 @@ class double_buffered_scratchpad:
                                        word_size=word_size,
                                        active_buf_frac=rd_buf_active_frac,
                                        backing_buf_default_bw=filter_backing_buf_bw,
-                                       use_ramulator_trace=self.use_ramulator_trace
+                                       use_ramulator_trace=self.use_ramulator_trace,
+                                       num_bank=total_read_banks,
+                                       enable_bank_model=enable_bank_model,
+                                       enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                                       enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                                       layer_name=layer_name
                                        )
         else:
             self.ifmap_buf = rdbuf()
@@ -141,10 +160,14 @@ class double_buffered_scratchpad:
                                       word_size=word_size,
                                       active_buf_frac=rd_buf_active_frac,
                                       backing_buf_bw=ifmap_backing_buf_bw,
-                                      num_bank=ifmap_sram_bank_num,
+                                      num_bank=total_read_banks,
                                       num_port=ifmap_sram_bank_port,
                                       enable_layout_evaluation=using_ifmap_custom_layout,
-                                      use_ramulator_trace=self.use_ramulator_trace
+                                      use_ramulator_trace=self.use_ramulator_trace,
+                                      enable_bank_model=enable_bank_model,
+                                      enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                                      enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                                      layer_name=layer_name
                                       )
 
             self.filter_buf.set_params(backing_buf_obj=self.filter_port,
@@ -152,17 +175,26 @@ class double_buffered_scratchpad:
                                        word_size=word_size,
                                        active_buf_frac=rd_buf_active_frac,
                                        backing_buf_bw=filter_backing_buf_bw,
-                                       num_bank=filter_sram_bank_num,
+                                       num_bank=total_read_banks,
                                        num_port=filter_sram_bank_port,
                                        enable_layout_evaluation=using_filter_custom_layout,
-                                       use_ramulator_trace=self.use_ramulator_trace
+                                       use_ramulator_trace=self.use_ramulator_trace,
+                                       enable_bank_model=enable_bank_model,
+                                       enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                                       enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                                       layer_name=layer_name
                                        )
 
         self.ofmap_buf.set_params(backing_buf_obj=self.ofmap_port,
                                   total_size_bytes=ofmap_buf_size_bytes,
                                   word_size=word_size,
                                   active_buf_frac=wr_buf_active_frac,
-                                  backing_buf_bw=ofmap_backing_buf_bw)
+                                  backing_buf_bw=ofmap_backing_buf_bw,
+                                  num_bank=total_mem_banks,
+                                  enable_bank_model=enable_bank_model,
+                                  enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                                  enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                                  layer_name=layer_name)
 
         self.verbose = verbose
 
@@ -242,6 +274,7 @@ class double_buffered_scratchpad:
 
         self.total_cycles = 0
         self.stall_cycles = 0
+        self.global_bank_conflict_stall_cycles = 0
 
         ifmap_hit_latency = self.ifmap_buf.get_hit_latency()
         filter_hit_latency = self.filter_buf.get_hit_latency()
@@ -276,7 +309,20 @@ class double_buffered_scratchpad:
             ofmap_serviced_cycles += [ofmap_cycle_out[0]]
             ofmap_stalls = ofmap_cycle_out[0] - cycle_arr[0]
 
-            self.stall_cycles += int(max(ifmap_stalls[0], filter_stalls[0], ofmap_stalls[0]))
+            ifmap_conflict_blocked = int(self.ifmap_buf.get_last_call_bank_conflict_blocked_cycles()) \
+                if hasattr(self.ifmap_buf, 'get_last_call_bank_conflict_blocked_cycles') else 0
+            filter_conflict_blocked = int(self.filter_buf.get_last_call_bank_conflict_blocked_cycles()) \
+                if hasattr(self.filter_buf, 'get_last_call_bank_conflict_blocked_cycles') else 0
+            ofmap_conflict_blocked = int(self.ofmap_buf.get_last_call_bank_conflict_blocked_cycles()) \
+                if hasattr(self.ofmap_buf, 'get_last_call_bank_conflict_blocked_cycles') else 0
+
+            line_total_stall = int(max(ifmap_stalls[0], filter_stalls[0], ofmap_stalls[0]))
+            line_conflict_blocked = int(max(ifmap_conflict_blocked, filter_conflict_blocked, ofmap_conflict_blocked))
+
+            # Attribute only the stall that can be explained by bank conflicts on the critical path.
+            self.global_bank_conflict_stall_cycles += min(line_total_stall, line_conflict_blocked)
+
+            self.stall_cycles += line_total_stall
             #self.stall_cycles += ifmap_stalls[0] + filter_stalls[0] + ofmap_stalls[0]
 
         if self.estimate_bandwidth_mode:
@@ -332,6 +378,7 @@ class double_buffered_scratchpad:
         cycle_offset = 0
         self.total_cycles = 0
         self.stall_cycles = 0
+        self.global_bank_conflict_stall_cycles = 0
 
         # Status bar
         pbar_disable = not self.verbose #or True
@@ -484,6 +531,14 @@ class double_buffered_scratchpad:
         return int(self.stall_cycles)
 
     #
+    def get_global_bank_conflict_stall_cycles(self):
+        """
+        Method to get globally attributed stall cycles caused by bank conflicts.
+        """
+        assert self.traces_valid, 'Traces not generated yet'
+        return int(self.global_bank_conflict_stall_cycles)
+
+    #
     def get_ifmap_sram_start_stop_cycles(self):
         """
         Method to get the start and stop cycles of ifmap SRAM requests by the systolic array if
@@ -625,6 +680,78 @@ class double_buffered_scratchpad:
             = self.ofmap_buf.get_external_access_start_stop_cycles()
 
         return self.ofmap_dram_start_cycle, self.ofmap_dram_stop_cycle, self.ofmap_dram_writes
+
+    #
+    def get_bank_utilization_stats(self, total_sim_cycles=0):
+        """
+        Aggregate per-bank stats across IFMAP/FILTER read ports and OFMAP write port.
+        """
+        denom = int(total_sim_cycles) if int(total_sim_cycles) > 0 else int(self.total_cycles)
+
+        source_stats = []
+        if hasattr(self.ifmap_buf, 'get_bank_utilization_stats'):
+            source_stats.append(self.ifmap_buf.get_bank_utilization_stats(total_sim_cycles=denom))
+        if hasattr(self.filter_buf, 'get_bank_utilization_stats'):
+            source_stats.append(self.filter_buf.get_bank_utilization_stats(total_sim_cycles=denom))
+        if hasattr(self.ofmap_buf, 'get_bank_utilization_stats'):
+            source_stats.append(self.ofmap_buf.get_bank_utilization_stats(total_sim_cycles=denom))
+
+        max_num_banks = 0
+        for stats in source_stats:
+            max_num_banks = max(max_num_banks, len(stats))
+
+        if max_num_banks == 0:
+            return []
+
+        combined = [
+            {'bank_id': i, 'busy_cycles': 0, 'access_count': 0, 'source_count': 0}
+            for i in range(max_num_banks)
+        ]
+
+        for stats in source_stats:
+            for item in stats:
+                bid = int(item['bank_id'])
+                combined[bid]['busy_cycles'] += int(item['busy_cycles'])
+                combined[bid]['access_count'] += int(item['access_count'])
+                combined[bid]['source_count'] += 1
+
+        for item in combined:
+            normalized_denom = denom * int(item['source_count'])
+            if normalized_denom <= 0:
+                item['utilization'] = 0.0
+            else:
+                # Normalize by contributing memory services so utilization stays within [0, 1].
+                item['utilization'] = item['busy_cycles'] / float(normalized_denom)
+
+        return combined
+
+    #
+    def get_bank_conflict_stall_cycles(self):
+        """
+        Return total bank conflict stalls accumulated in backing memory services.
+        """
+        total_conflict = 0
+        if hasattr(self.ifmap_buf, 'get_bank_conflict_stall_cycles'):
+            total_conflict += int(self.ifmap_buf.get_bank_conflict_stall_cycles())
+        if hasattr(self.filter_buf, 'get_bank_conflict_stall_cycles'):
+            total_conflict += int(self.filter_buf.get_bank_conflict_stall_cycles())
+        if hasattr(self.ofmap_buf, 'get_bank_conflict_stall_cycles'):
+            total_conflict += int(self.ofmap_buf.get_bank_conflict_stall_cycles())
+        return total_conflict
+
+    #
+    def get_bank_conflict_blocked_cycles(self):
+        """
+        Return total per-cycle deduplicated bank conflict cycles from backing memory services.
+        """
+        total_blocked = 0
+        if hasattr(self.ifmap_buf, 'get_bank_conflict_blocked_cycles'):
+            total_blocked += int(self.ifmap_buf.get_bank_conflict_blocked_cycles())
+        if hasattr(self.filter_buf, 'get_bank_conflict_blocked_cycles'):
+            total_blocked += int(self.filter_buf.get_bank_conflict_blocked_cycles())
+        if hasattr(self.ofmap_buf, 'get_bank_conflict_blocked_cycles'):
+            total_blocked += int(self.ofmap_buf.get_bank_conflict_blocked_cycles())
+        return total_blocked
 
     #
     def get_ifmap_sram_trace_matrix(self):

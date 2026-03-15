@@ -34,7 +34,7 @@ class scale_config:
         self.layoutfile = ""
         self.bandwidths = []
         self.valid_conf_flag = False
-        self.num_bank = 1
+        self.num_bank = 16
         self.num_port = 2
 
         # Layout flags with default values
@@ -59,6 +59,12 @@ class scale_config:
     
     # Sarbartha: Added ramulator based DRAM trace support
         self.use_ramulator_trace = False
+
+        # Optional bank-model controls (default off for compatibility)
+        self.enable_bank_model = False
+        self.enable_moe_parallel_bank_arb = False
+        self.enable_dynamic_bank_alloc = False
+        self.dump_bank_util_csv = False
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -95,6 +101,18 @@ class scale_config:
                 self.use_ramulator_trace = True
             else:
                 self.use_ramulator_trace = False
+
+        if config.has_option(section, 'EnableBankModel'):
+            self.enable_bank_model = config.getboolean(section, 'EnableBankModel')
+
+        if config.has_option(section, 'EnableMoeParallelBankArb'):
+            self.enable_moe_parallel_bank_arb = config.getboolean(section, 'EnableMoeParallelBankArb')
+
+        if config.has_option(section, 'EnableDynamic'):
+            self.enable_dynamic_bank_alloc = config.getboolean(section, 'EnableDynamic')
+
+        if config.has_option(section, 'DumpBankUtilCsv'):
+            self.dump_bank_util_csv = config.getboolean(section, 'DumpBankUtilCsv')
         
         # Parse TimeLinearModel if present
         if config.has_option(section, 'TimeLinearModel'):
@@ -121,6 +139,11 @@ class scale_config:
             self.req_buf_sz_rd = int(config.get(section, 'ReadRequestBuffer')) // div_factor
         if config.has_option(section, 'WriteRequestBuffer'):
             self.req_buf_sz_wr = int(config.get(section, 'WriteRequestBuffer')) // div_factor
+        if config.has_option(section, 'MemoryBanks'):
+            # Support values like "32 # comment" in existing configs.
+            num_bank_str = config.get(section, 'MemoryBanks').split('#')[0].strip()
+            if num_bank_str != '':
+                self.num_bank = int(num_bank_str)
 
         layout_section = 'layout'
         self.using_ifmap_custom_layout = config.getboolean(layout_section, 'IfmapCustomLayout')
@@ -243,6 +266,10 @@ class scale_config:
         bw_mode = 'USER' if self.use_user_bandwidth else 'CALC'
         config.set(section, 'InterfaceBandwidth', str(bw_mode))
         config.set(section, 'UseRamulatorTrace', str(self.use_ramulator_trace))
+        config.set(section, 'EnableBankModel', str(self.enable_bank_model))
+        config.set(section, 'EnableMoeParallelBankArb', str(self.enable_moe_parallel_bank_arb))
+        config.set(section, 'EnableDynamic', str(self.enable_dynamic_bank_alloc))
+        config.set(section, 'DumpBankUtilCsv', str(self.dump_bank_util_csv))
         config.set(section, 'TimeLinearModel', str(self.time_linear_model))
 
         with open(conf_file_out, 'w') as configfile:
@@ -492,6 +519,26 @@ class scale_config:
     def get_num_bank(self):
         if self.valid_conf_flag:
             return self.num_bank
+
+    def get_enable_bank_model(self):
+        if self.valid_conf_flag:
+            return self.enable_bank_model
+        return False
+
+    def get_enable_moe_parallel_bank_arb(self):
+        if self.valid_conf_flag:
+            return self.enable_moe_parallel_bank_arb
+        return False
+
+    def get_enable_dynamic_bank_alloc(self):
+        if self.valid_conf_flag:
+            return self.enable_dynamic_bank_alloc
+        return False
+
+    def get_dump_bank_util_csv(self):
+        if self.valid_conf_flag:
+            return self.dump_bank_util_csv
+        return False
         
     def get_num_port(self):
         if self.valid_conf_flag:

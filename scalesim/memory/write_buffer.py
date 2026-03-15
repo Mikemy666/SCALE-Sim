@@ -67,7 +67,12 @@ class write_buffer:
     #
     def set_params(self, backing_buf_obj,
                    total_size_bytes=128, word_size=1, active_buf_frac=0.9,
-                   backing_buf_bw=100
+                   backing_buf_bw=100,
+                   num_bank=16,
+                   enable_bank_model=False,
+                   enable_moe_parallel_bank_arb=False,
+                   enable_dynamic_bank_alloc=False,
+                   layer_name=''
                    ):
         """
         Method to set the ofmap memory simulation parameters for housekeeping.
@@ -85,6 +90,15 @@ class write_buffer:
         self.active_buf_size = int(math.ceil(self.total_size_elems * self.active_buf_frac))
         self.drain_buf_size = self.total_size_elems - self.active_buf_size
         self.free_space = self.total_size_elems
+
+        if hasattr(self.backing_buffer, 'set_bank_model_params'):
+            self.backing_buffer.set_bank_model_params(
+                num_banks=num_bank,
+                enable_bank_model=enable_bank_model,
+                enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                layer_name=layer_name
+            )
 
     #
     def reset(self):
@@ -324,6 +338,42 @@ class write_buffer:
         start_cycle = np.amin(self.cycles_vec)
         end_cycle = np.amax(self.cycles_vec)
         return start_cycle, end_cycle
+
+    #
+    def get_bank_utilization_stats(self, total_sim_cycles=0):
+        """
+        Return per-bank stats from backing memory service when available.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_stats'):
+            return self.backing_buffer.get_bank_stats(total_sim_cycles=total_sim_cycles)
+        return []
+
+    #
+    def get_bank_conflict_stall_cycles(self):
+        """
+        Return bank conflict stall cycles from backing memory service when available.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_conflict_stall_cycles'):
+            return self.backing_buffer.get_bank_conflict_stall_cycles()
+        return 0
+
+    #
+    def get_bank_conflict_blocked_cycles(self):
+        """
+        Return per-cycle deduplicated bank conflict cycles from backing memory service.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_conflict_blocked_cycles'):
+            return self.backing_buffer.get_bank_conflict_blocked_cycles()
+        return 0
+
+    #
+    def get_last_call_bank_conflict_blocked_cycles(self):
+        """
+        Return blocked cycles from bank conflicts in the most recent service call.
+        """
+        if hasattr(self.backing_buffer, 'get_last_call_bank_conflict_blocked_cycles'):
+            return self.backing_buffer.get_last_call_bank_conflict_blocked_cycles()
+        return 0
 
     #
     def print_trace(self, filename):

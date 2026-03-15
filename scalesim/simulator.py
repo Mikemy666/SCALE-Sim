@@ -4,6 +4,7 @@ This file contains the 'simulator' class that simulates the entire model using t
 """
 
 import os
+import re
 
 from scalesim.scale_config import scale_config as cfg
 from scalesim.topology_utils import topologies as topo
@@ -35,6 +36,178 @@ class simulator:
 
         self.params_set_flag = False
         self.all_layer_run_done = False
+
+    def _parse_moe_layer_name(self, layer_name):
+        """
+        Parse layer names like MoE-E0-FF1 into (expert_id, ff_stage).
+        """
+        layer_name_str = str(layer_name)
+        match = re.match(r'^MoE-E(\d+)-FF(\d+)$', layer_name_str)
+        if match is None:
+            return None
+        return int(match.group(1)), int(match.group(2))
+
+    def _build_serial_schedule(self, layer_infos):
+        """
+        Build the default serial schedule in topology order.
+        """
+        schedule = {}
+        cursor = 0
+        for item in layer_infos:
+            lid = int(item['layer_id'])
+            cyc = max(int(item['cycles']), 0)
+            schedule[lid] = {
+                'start': cursor,
+                'end': cursor + cyc
+            }
+            cursor += cyc
+        return schedule, cursor
+
+    def _build_moe_parallel_schedule(self, layer_infos):
+        """
+        Build MoE-aware schedule:
+        - non-MoE layers remain serial
+        - contiguous MoE blocks run experts in parallel
+        - each expert remains serial by FF stage order (FF1 -> FF2 -> ...)
+        """
+        enable_moe_parallel = self.conf.get_enable_moe_parallel_bank_arb() \
+            if hasattr(self.conf, 'get_enable_moe_parallel_bank_arb') else False
+
+        schedule = {}
+        cursor = 0
+        idx = 0
+        num_layers = len(layer_infos)
+
+        while idx < num_layers:
+            cur_name = layer_infos[idx]['name']
+            parsed = self._parse_moe_layer_name(cur_name)
+
+            if (not enable_moe_parallel) or parsed is None:
+                lid = int(layer_infos[idx]['layer_id'])
+                cyc = max(int(layer_infos[idx]['cycles']), 0)
+                schedule[lid] = {
+                    'start': cursor,
+                    'end': cursor + cyc
+                }
+                cursor += cyc
+                idx += 1
+                continue
+
+            block_start = idx
+            while idx < num_layers and self._parse_moe_layer_name(layer_infos[idx]['name']) is not None:
+                idx += 1
+            block_end = idx
+
+            expert_stage_map = {}
+            for block_idx in range(block_start, block_end):
+                layer_info = layer_infos[block_idx]
+                parse_out = self._parse_moe_layer_name(layer_info['name'])
+                if parse_out is None:
+                    continue
+                expert_id, ff_stage = parse_out
+                if expert_id not in expert_stage_map:
+                    expert_stage_map[expert_id] = []
+                expert_stage_map[expert_id].append((ff_stage, layer_info))
+
+            block_finish = cursor
+            for expert_id in expert_stage_map:
+                expert_cursor = cursor
+                stage_entries = sorted(expert_stage_map[expert_id], key=lambda x: x[0])
+                for _, layer_info in stage_entries:
+                    lid = int(layer_info['layer_id'])
+                    cyc = max(int(layer_info['cycles']), 0)
+                    schedule[lid] = {
+                        'start': expert_cursor,
+                        'end': expert_cursor + cyc
+                    }
+                    expert_cursor += cyc
+
+                if expert_cursor > block_finish:
+                    block_finish = expert_cursor
+
+            cursor = block_finish
+
+        return schedule, cursor
+
+    def _generate_moe_parallel_reports(self):
+        """
+        Emit schedule-oriented reports that compare serial execution and MoE-parallel execution.
+        """
+        layer_infos = []
+        for lid in range(len(self.single_layer_sim_object_list)):
+            layer_obj = self.single_layer_sim_object_list[lid]
+            compute_items = layer_obj.get_compute_report_items()
+            layer_infos.append({
+                'layer_id': lid,
+                'name': self.topo.get_layer_name(lid),
+                'cycles': int(compute_items[1]),
+                'compute_stall': int(compute_items[2]),
+                'global_bank_conflict_stall': int(layer_obj.get_global_bank_conflict_stall_cycles())
+            })
+
+        serial_sched, serial_total = self._build_serial_schedule(layer_infos)
+        parallel_sched, parallel_total = self._build_moe_parallel_schedule(layer_infos)
+
+        schedule_report_name = self.top_path + '/MOE_PARALLEL_SCHEDULE_REPORT.csv'
+        schedule_report = open(schedule_report_name, 'w')
+        schedule_report.write(
+            'layer_id,layer_name,is_moe,expert_id,ff_stage,layer_cycles,compute_stall_cycles,'
+            'global_bank_conflict_stall_cycles,serial_start,serial_end,parallel_start,parallel_end,start_shift\n'
+        )
+
+        moe_layer_ids = []
+        for item in layer_infos:
+            lid = int(item['layer_id'])
+            name = str(item['name'])
+            parse_out = self._parse_moe_layer_name(name)
+            is_moe = parse_out is not None
+            expert_id = parse_out[0] if is_moe else -1
+            ff_stage = parse_out[1] if is_moe else -1
+            if is_moe:
+                moe_layer_ids.append(lid)
+
+            s_start = int(serial_sched[lid]['start'])
+            s_end = int(serial_sched[lid]['end'])
+            p_start = int(parallel_sched[lid]['start'])
+            p_end = int(parallel_sched[lid]['end'])
+            start_shift = s_start - p_start
+
+            schedule_report.write(
+                f"{lid},{name},{is_moe},{expert_id},{ff_stage},{int(item['cycles'])},"
+                f"{int(item['compute_stall'])},{int(item['global_bank_conflict_stall'])},"
+                f"{s_start},{s_end},{p_start},{p_end},{start_shift}\n"
+            )
+
+        schedule_report.close()
+
+        summary_report_name = self.top_path + '/MOE_PARALLEL_SUMMARY.csv'
+        summary_report = open(summary_report_name, 'w')
+        summary_report.write('metric,value\n')
+        summary_report.write(f'serial_total_cycles,{int(serial_total)}\n')
+        summary_report.write(f'parallel_total_cycles,{int(parallel_total)}\n')
+        speedup = 0.0
+        if parallel_total > 0:
+            speedup = float(serial_total) / float(parallel_total)
+        summary_report.write(f'estimated_speedup,{speedup}\n')
+
+        if len(moe_layer_ids) > 0:
+            moe_serial_start = min(int(serial_sched[x]['start']) for x in moe_layer_ids)
+            moe_serial_end = max(int(serial_sched[x]['end']) for x in moe_layer_ids)
+            moe_parallel_start = min(int(parallel_sched[x]['start']) for x in moe_layer_ids)
+            moe_parallel_end = max(int(parallel_sched[x]['end']) for x in moe_layer_ids)
+
+            summary_report.write(f'moe_serial_window_cycles,{int(moe_serial_end - moe_serial_start)}\n')
+            summary_report.write(f'moe_parallel_window_cycles,{int(moe_parallel_end - moe_parallel_start)}\n')
+            moe_speedup = 0.0
+            if (moe_parallel_end - moe_parallel_start) > 0:
+                moe_speedup = float(moe_serial_end - moe_serial_start) / float(moe_parallel_end - moe_parallel_start)
+            summary_report.write(f'moe_window_speedup,{moe_speedup}\n')
+        else:
+            summary_report.write('moe_serial_window_cycles,0\n')
+            summary_report.write('moe_parallel_window_cycles,0\n')
+            summary_report.write('moe_window_speedup,0.0\n')
+
+        summary_report.close()
 
     #
     def set_params(self,
@@ -202,6 +375,26 @@ class simulator:
         header += 'DRAM OFMAP Start Cycle, DRAM OFMAP Stop Cycle, DRAM OFMAP Writes,\n'
         detail_report.write(header)
 
+        dump_bank_util_csv = self.conf.get_dump_bank_util_csv() if hasattr(self.conf, 'get_dump_bank_util_csv') else False
+        bank_report = None
+        bank_stall_report = None
+        bank_busy_totals = []
+        bank_access_totals = []
+        bank_denom_totals = []
+        total_bank_conflict_stalls = 0
+        total_bank_conflict_blocked_cycles = 0
+        total_global_bank_conflict_stall_cycles = 0
+        if dump_bank_util_csv:
+            bank_report_name = self.top_path + '/bank_utilization.csv'
+            bank_report = open(bank_report_name, 'w')
+            bank_report.write('bank_id,busy_cycles,access_count,utilization\n')
+
+            bank_stall_report_name = self.top_path + '/bank_stall_breakdown.csv'
+            bank_stall_report = open(bank_stall_report_name, 'w')
+            bank_stall_report.write(
+                'layer_id,compute_stall_cycles,bank_conflict_stall_cycles,bank_conflict_blocked_cycles,global_bank_conflict_stall_cycles\n'
+            )
+
         if self.conf.sparsity_support is True:
             sparse_report_name = self.top_path + '/SPARSE_REPORT.csv'
             sparse_report = open(sparse_report_name, 'w')
@@ -220,6 +413,17 @@ class simulator:
             log += ', '.join([str(x) for x in compute_report_items_this_layer])
             log += ',\n'
             compute_report.write(log)
+
+            if dump_bank_util_csv:
+                bank_conflict_stalls_this_layer = int(single_layer_obj.get_bank_conflict_stall_cycles())
+                bank_conflict_blocked_cycles_this_layer = int(single_layer_obj.get_bank_conflict_blocked_cycles())
+                global_bank_conflict_stall_cycles_this_layer = int(single_layer_obj.get_global_bank_conflict_stall_cycles())
+                total_bank_conflict_stalls += bank_conflict_stalls_this_layer
+                total_bank_conflict_blocked_cycles += bank_conflict_blocked_cycles_this_layer
+                total_global_bank_conflict_stall_cycles += global_bank_conflict_stall_cycles_this_layer
+                bank_stall_report.write(
+                    f'{lid},{int(compute_report_items_this_layer[2])},{bank_conflict_stalls_this_layer},{bank_conflict_blocked_cycles_this_layer},{global_bank_conflict_stall_cycles_this_layer}\n'
+                )
             
             # Generate TIME_REPORT entry using linear model
             total_cycles = compute_report_items_this_layer[1]  # Total Cycles (not including prefetch)
@@ -256,6 +460,23 @@ class simulator:
             log += ',\n'
             detail_report.write(log)
 
+            if dump_bank_util_csv:
+                layer_bank_stats = single_layer_obj.get_bank_utilization_items()
+                if len(layer_bank_stats) > 0:
+                    if len(bank_busy_totals) < len(layer_bank_stats):
+                        grow = len(layer_bank_stats) - len(bank_busy_totals)
+                        bank_busy_totals.extend([0] * grow)
+                        bank_access_totals.extend([0] * grow)
+                        bank_denom_totals.extend([0] * grow)
+
+                    for item in layer_bank_stats:
+                        bank_id = int(item['bank_id'])
+                        source_count = int(item['source_count']) if 'source_count' in item else 1
+                        layer_cycles = int(compute_report_items_this_layer[1])
+                        bank_busy_totals[bank_id] += int(item['busy_cycles'])
+                        bank_access_totals[bank_id] += int(item['access_count'])
+                        bank_denom_totals[bank_id] += layer_cycles * source_count
+
             if self.conf.sparsity_support is True:
                 sparse_report_items_this_layer = single_layer_obj.get_sparse_report_items()
                 log = str(lid) + ', ' + self.conf.sparsity_representation + ', '
@@ -267,8 +488,29 @@ class simulator:
         bandwidth_report.close()
         detail_report.close()
         time_report.close()
+
+        if dump_bank_util_csv:
+            for bank_id in range(len(bank_busy_totals)):
+                busy_cycles = bank_busy_totals[bank_id]
+                access_count = bank_access_totals[bank_id]
+                if bank_denom_totals[bank_id] > 0:
+                    utilization = busy_cycles / float(bank_denom_totals[bank_id])
+                else:
+                    utilization = 0.0
+                bank_report.write(
+                    f'{bank_id},{busy_cycles},{access_count},{utilization}\n'
+                )
+
+            bank_report.close()
+            bank_stall_report.write(
+                f'TOTAL,NA,{total_bank_conflict_stalls},{total_bank_conflict_blocked_cycles},{total_global_bank_conflict_stall_cycles}\n'
+            )
+            bank_stall_report.close()
+
         if self.conf.sparsity_support is True:
             sparse_report.close()
+
+        self._generate_moe_parallel_reports()
 
     #
     def get_total_cycles(self):

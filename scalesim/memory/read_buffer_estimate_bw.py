@@ -68,7 +68,12 @@ class ReadBufferEstimateBw:
     def set_params(self, backing_buf_obj,
                    total_size_bytes=1, word_size=1, active_buf_frac=0.9,
                    hit_latency=1, backing_buf_default_bw=1,
-                   use_ramulator_trace = False):
+                   use_ramulator_trace = False,
+                   num_bank=1,
+                   enable_bank_model=False,
+                   enable_moe_parallel_bank_arb=False,
+                   enable_dynamic_bank_alloc=False,
+                   layer_name=''):
         """
         Method to set the ifmap/filter double buffered memory simulation parameters for estimate
         bandwidth mode.
@@ -103,6 +108,15 @@ class ReadBufferEstimateBw:
         self.last_prefetch_start_cycle = -2
         self.last_prefetch_end_cycle = -1  # TODO: Check what the correct value is
         self.use_ramulator_trace = use_ramulator_trace
+
+        if hasattr(self.backing_buffer, 'set_bank_model_params'):
+            self.backing_buffer.set_bank_model_params(
+                num_banks=num_bank,
+                enable_bank_model=enable_bank_model,
+                enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
+                enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
+                layer_name=layer_name
+            )
 
         #
         self.params_set_flag = True
@@ -360,6 +374,42 @@ class ReadBufferEstimateBw:
         end_cycle = self.trace_matrix[-1][0]
 
         return start_cycle, end_cycle
+
+    #
+    def get_bank_utilization_stats(self, total_sim_cycles=0):
+        """
+        Return per-bank stats from backing memory service when available.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_stats'):
+            return self.backing_buffer.get_bank_stats(total_sim_cycles=total_sim_cycles)
+        return []
+
+    #
+    def get_bank_conflict_stall_cycles(self):
+        """
+        Return bank conflict stall cycles from backing memory service when available.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_conflict_stall_cycles'):
+            return self.backing_buffer.get_bank_conflict_stall_cycles()
+        return 0
+
+    #
+    def get_bank_conflict_blocked_cycles(self):
+        """
+        Return per-cycle deduplicated bank conflict cycles from backing memory service.
+        """
+        if hasattr(self.backing_buffer, 'get_bank_conflict_blocked_cycles'):
+            return self.backing_buffer.get_bank_conflict_blocked_cycles()
+        return 0
+
+    #
+    def get_last_call_bank_conflict_blocked_cycles(self):
+        """
+        Return blocked cycles from bank conflicts in the most recent service call.
+        """
+        if hasattr(self.backing_buffer, 'get_last_call_bank_conflict_blocked_cycles'):
+            return self.backing_buffer.get_last_call_bank_conflict_blocked_cycles()
+        return 0
 
     #
     def print_trace(self, filename):

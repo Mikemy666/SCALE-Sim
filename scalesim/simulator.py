@@ -5,11 +5,15 @@ This file contains the 'simulator' class that simulates the entire model using t
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from scalesim.scale_config import scale_config as cfg
 from scalesim.topology_utils import topologies as topo
 from scalesim.layout_utils import layouts as layout
 from scalesim.single_layer_sim import single_layer_sim as layer_sim
+from scalesim.memory.double_buffered_scratchpad_mem import double_buffered_scratchpad as mem_dbsp
+from scalesim.memory.read_port import read_port as rdport
+from scalesim.memory.write_port import write_port as wrport
 from scalesim.linear_model.tpu import tpuv4_linear_model, tpuv5e_linear_model, tpuv6e_linear_model
 
 
@@ -36,6 +40,194 @@ class simulator:
 
         self.params_set_flag = False
         self.all_layer_run_done = False
+
+    def _run_single_layer(self, single_layer_obj, force_quiet=False):
+        """
+        Run one layer and preserve original logging/trace behavior.
+        """
+        layer_id = single_layer_obj.get_layer_id()
+        prev_verbose = single_layer_obj.verbose
+        if force_quiet:
+            single_layer_obj.verbose = False
+
+        try:
+            if self.verbose:
+                print('\nRunning Layer ' + str(layer_id))
+
+            single_layer_obj.run()
+
+            if self.verbose:
+                comp_items = single_layer_obj.get_compute_report_items()
+                total_cycles = comp_items[0]
+                comp_cycles = comp_items[1]
+                stall_cycles = comp_items[2]
+                util = comp_items[3]
+                mapping_eff = comp_items[4]
+                print('Total cycles: ' + str(total_cycles))
+                print('Compute cycles: ' + str(comp_cycles))
+                print('Stall cycles: ' + str(stall_cycles))
+                print('Overall utilization: ' + "{:.2f}".format(util) +'%')
+                print('Mapping efficiency: ' + "{:.2f}".format(mapping_eff) +'%')
+
+                avg_bw_items = single_layer_obj.get_bandwidth_report_items()
+                if self.conf.sparsity_support is True:
+                    avg_ifmap_sram_bw = avg_bw_items[0]
+                    avg_filter_sram_bw = avg_bw_items[1]
+                    avg_filter_metadata_sram_bw = avg_bw_items[2]
+                    avg_ofmap_sram_bw = avg_bw_items[3]
+                    avg_ifmap_dram_bw = avg_bw_items[4]
+                    avg_filter_dram_bw = avg_bw_items[5]
+                    avg_ofmap_dram_bw = avg_bw_items[6]
+                else:
+                    avg_ifmap_sram_bw = avg_bw_items[0]
+                    avg_filter_sram_bw = avg_bw_items[1]
+                    avg_ofmap_sram_bw = avg_bw_items[2]
+                    avg_ifmap_dram_bw = avg_bw_items[3]
+                    avg_filter_dram_bw = avg_bw_items[4]
+                    avg_ofmap_dram_bw = avg_bw_items[5]
+
+                print('Average IFMAP SRAM BW: ' + "{:.3f}".format(avg_ifmap_sram_bw) + \
+                      ' words/cycle')
+                print('Average Filter SRAM BW: ' + "{:.3f}".format(avg_filter_sram_bw) + \
+                      ' words/cycle')
+                if self.conf.sparsity_support is True:
+                    print('Average Filter Metadata SRAM BW: ' + \
+                          "{:.3f}".format(avg_filter_metadata_sram_bw) + ' words/cycle')
+                print('Average OFMAP SRAM BW: ' + "{:.3f}".format(avg_ofmap_sram_bw) + \
+                      ' words/cycle')
+                print('Average IFMAP DRAM BW: ' + "{:.3f}".format(avg_ifmap_dram_bw) + \
+                      ' words/cycle')
+                print('Average Filter DRAM BW: ' + "{:.3f}".format(avg_filter_dram_bw) + \
+                      ' words/cycle')
+                print('Average OFMAP DRAM BW: ' + "{:.3f}".format(avg_ofmap_dram_bw) + \
+                      ' words/cycle')
+
+            if self.save_trace:
+                if self.verbose:
+                    print('Saving traces: ', end='')
+                single_layer_obj.save_traces(self.top_path)
+                if self.verbose:
+                    print('Done!')
+        finally:
+            single_layer_obj.verbose = prev_verbose
+
+    def _run_moe_block_in_parallel(self, block_start, block_end):
+        """
+        Execute a contiguous MoE block in FF-stage waves.
+        Layers in the same FF stage are launched concurrently.
+        """
+        # Shared memory-service ports for the whole MoE block.
+        # One shared read port is intentionally used by both IFMAP and FILTER paths
+        # so all input-side requests contend in the same bank model.
+        shared_read_port = rdport()
+        shared_write_port = wrport()
+
+        for block_order, layer_idx in enumerate(range(block_start, block_end)):
+            layer_obj = self.single_layer_sim_object_list[layer_idx]
+            self._configure_layer_with_shared_memory(
+                layer_obj=layer_obj,
+                shared_ifmap_port=shared_read_port,
+                shared_filter_port=shared_read_port,
+                shared_ofmap_port=shared_write_port,
+                reset_bank_model_state=(block_order == 0)
+            )
+
+        stage_to_indices = {}
+        for idx in range(block_start, block_end):
+            layer_name = self.topo.get_layer_name(idx)
+            parse_out = self._parse_moe_layer_name(layer_name)
+            if parse_out is None:
+                continue
+            _, ff_stage = parse_out
+            if ff_stage not in stage_to_indices:
+                stage_to_indices[ff_stage] = []
+            stage_to_indices[ff_stage].append(idx)
+
+        for ff_stage in sorted(stage_to_indices.keys()):
+            stage_indices = stage_to_indices[ff_stage]
+            if self.verbose:
+                print(f'\nRunning MoE stage wave FF{ff_stage}: layers {stage_indices}')
+
+            if len(stage_indices) == 1:
+                layer_obj = self.single_layer_sim_object_list[stage_indices[0]]
+                self._run_single_layer(layer_obj)
+                continue
+
+            # Running multiple tqdm bars concurrently is noisy; force quiet in parallel workers.
+            with ThreadPoolExecutor(max_workers=len(stage_indices)) as executor:
+                futures = []
+                for layer_idx in stage_indices:
+                    layer_obj = self.single_layer_sim_object_list[layer_idx]
+                    futures.append(executor.submit(self._run_single_layer, layer_obj, True))
+
+                for fut in futures:
+                    fut.result()
+
+    def _configure_layer_with_shared_memory(self,
+                                            layer_obj,
+                                            shared_ifmap_port,
+                                            shared_filter_port,
+                                            shared_ofmap_port,
+                                            reset_bank_model_state):
+        """
+        Configure one layer to use externally-shared memory-service ports.
+        """
+        mem_sys = mem_dbsp()
+        mem_sys.ifmap_port = shared_ifmap_port
+        mem_sys.filter_port = shared_filter_port
+        mem_sys.ofmap_port = shared_ofmap_port
+
+        word_size = 1
+        active_buf_frac = 0.5
+
+        ifmap_buf_size_kb, filter_buf_size_kb, ofmap_buf_size_kb = self.conf.get_mem_sizes()
+        ifmap_buf_size_bytes = 1024 * ifmap_buf_size_kb
+        filter_buf_size_bytes = 1024 * filter_buf_size_kb
+        ofmap_buf_size_bytes = 1024 * ofmap_buf_size_kb
+
+        ifmap_backing_bw = 1
+        filter_backing_bw = 1
+        ofmap_backing_bw = 1
+        estimate_bandwidth_mode = False
+        if self.conf.use_user_dram_bandwidth():
+            bws = self.conf.get_bandwidths_as_list()
+            ifmap_backing_bw = self.conf.ifmap_sram_bank_bandwidth
+            filter_backing_bw = self.conf.filter_sram_bank_bandwidth
+            ofmap_backing_bw = bws[0]
+        else:
+            arr_row, arr_col = self.conf.get_array_dims()
+            estimate_bandwidth_mode = True
+            ifmap_backing_bw = 10
+            filter_backing_bw = 10
+            ofmap_backing_bw = arr_col
+
+        lid = layer_obj.get_layer_id()
+        mem_sys.set_params(
+            layer_id=lid,
+            layer_name=self.topo.get_layer_name(lid),
+            word_size=word_size,
+            ifmap_buf_size_bytes=ifmap_buf_size_bytes,
+            filter_buf_size_bytes=filter_buf_size_bytes,
+            ofmap_buf_size_bytes=ofmap_buf_size_bytes,
+            rd_buf_active_frac=active_buf_frac,
+            wr_buf_active_frac=active_buf_frac,
+            ifmap_backing_buf_bw=ifmap_backing_bw,
+            filter_backing_buf_bw=filter_backing_bw,
+            ofmap_backing_buf_bw=ofmap_backing_bw,
+            verbose=False,
+            ifmap_sram_bank_num=self.conf.ifmap_sram_bank_num,
+            ifmap_sram_bank_port=self.conf.ifmap_sram_bank_port,
+            filter_sram_bank_num=self.conf.filter_sram_bank_num,
+            filter_sram_bank_port=self.conf.filter_sram_bank_port,
+            using_ifmap_custom_layout=layer_obj.using_ifmap_custom_layout,
+            using_filter_custom_layout=layer_obj.using_filter_custom_layout,
+            estimate_bandwidth_mode=estimate_bandwidth_mode,
+            config=self.conf,
+            topo=self.topo,
+            reset_bank_model_state=reset_bank_model_state
+        )
+
+        layer_obj.set_memory_system(mem_sys)
 
     def _parse_moe_layer_name(self, layer_name):
         """
@@ -67,8 +259,9 @@ class simulator:
         """
         Build MoE-aware schedule:
         - non-MoE layers remain serial
-        - contiguous MoE blocks run experts in parallel
-        - each expert remains serial by FF stage order (FF1 -> FF2 -> ...)
+                - contiguous MoE blocks run by FF-stage waves (all experts' FF1 in parallel,
+                    then all experts' FF2 in parallel, ...)
+                - this preserves per-expert serial dependencies while modeling expert-level parallelism
         """
         enable_moe_parallel = self.conf.get_enable_moe_parallel_bank_arb() \
             if hasattr(self.conf, 'get_enable_moe_parallel_bank_arb') else False
@@ -98,34 +291,34 @@ class simulator:
                 idx += 1
             block_end = idx
 
-            expert_stage_map = {}
+            stage_map = {}
             for block_idx in range(block_start, block_end):
                 layer_info = layer_infos[block_idx]
                 parse_out = self._parse_moe_layer_name(layer_info['name'])
                 if parse_out is None:
                     continue
-                expert_id, ff_stage = parse_out
-                if expert_id not in expert_stage_map:
-                    expert_stage_map[expert_id] = []
-                expert_stage_map[expert_id].append((ff_stage, layer_info))
+                _, ff_stage = parse_out
+                if ff_stage not in stage_map:
+                    stage_map[ff_stage] = []
+                stage_map[ff_stage].append(layer_info)
 
-            block_finish = cursor
-            for expert_id in expert_stage_map:
-                expert_cursor = cursor
-                stage_entries = sorted(expert_stage_map[expert_id], key=lambda x: x[0])
-                for _, layer_info in stage_entries:
+            block_cursor = cursor
+            for ff_stage in sorted(stage_map.keys()):
+                stage_start = block_cursor
+                stage_end = stage_start
+                for layer_info in stage_map[ff_stage]:
                     lid = int(layer_info['layer_id'])
                     cyc = max(int(layer_info['cycles']), 0)
                     schedule[lid] = {
-                        'start': expert_cursor,
-                        'end': expert_cursor + cyc
+                        'start': stage_start,
+                        'end': stage_start + cyc
                     }
-                    expert_cursor += cyc
+                    if stage_start + cyc > stage_end:
+                        stage_end = stage_start + cyc
 
-                if expert_cursor > block_finish:
-                    block_finish = expert_cursor
+                block_cursor = stage_end
 
-            cursor = block_finish
+            cursor = block_cursor
 
         return schedule, cursor
 
@@ -151,7 +344,7 @@ class simulator:
         schedule_report_name = self.top_path + '/MOE_PARALLEL_SCHEDULE_REPORT.csv'
         schedule_report = open(schedule_report_name, 'w')
         schedule_report.write(
-            'layer_id,layer_name,is_moe,expert_id,ff_stage,layer_cycles,compute_stall_cycles,'
+            'layer_id,layer_name,is_moe,expert_id,ff_stage,parallel_wave_id,layer_cycles,compute_stall_cycles,'
             'global_bank_conflict_stall_cycles,serial_start,serial_end,parallel_start,parallel_end,start_shift\n'
         )
 
@@ -163,6 +356,7 @@ class simulator:
             is_moe = parse_out is not None
             expert_id = parse_out[0] if is_moe else -1
             ff_stage = parse_out[1] if is_moe else -1
+            parallel_wave_id = ff_stage if is_moe else -1
             if is_moe:
                 moe_layer_ids.append(lid)
 
@@ -173,7 +367,7 @@ class simulator:
             start_shift = s_start - p_start
 
             schedule_report.write(
-                f"{lid},{name},{is_moe},{expert_id},{ff_stage},{int(item['cycles'])},"
+                f"{lid},{name},{is_moe},{expert_id},{ff_stage},{parallel_wave_id},{int(item['cycles'])},"
                 f"{int(item['compute_stall'])},{int(item['global_bank_conflict_stall'])},"
                 f"{s_start},{s_end},{p_start},{p_end},{start_shift}\n"
             )
@@ -183,6 +377,7 @@ class simulator:
         summary_report_name = self.top_path + '/MOE_PARALLEL_SUMMARY.csv'
         summary_report = open(summary_report_name, 'w')
         summary_report.write('metric,value\n')
+        summary_report.write('moe_parallel_policy,ff_stage_wave_parallel\n')
         summary_report.write(f'serial_total_cycles,{int(serial_total)}\n')
         summary_report.write(f'parallel_total_cycles,{int(parallel_total)}\n')
         speedup = 0.0
@@ -266,68 +461,29 @@ class simulator:
 
         self.top_path = report_path
 
-        # 2. Run each layer
-        # TODO: This is parallelizable
-        for single_layer_obj in self.single_layer_sim_object_list:
+        enable_moe_parallel = self.conf.get_enable_moe_parallel_bank_arb() \
+            if hasattr(self.conf, 'get_enable_moe_parallel_bank_arb') else False
 
-            if self.verbose:
-                layer_id = single_layer_obj.get_layer_id()
-                print('\nRunning Layer ' + str(layer_id))
+        # 2. Run each layer with optional MoE FF-stage-wave parallel execution.
+        idx = 0
+        while idx < len(self.single_layer_sim_object_list):
+            layer_name = self.topo.get_layer_name(idx)
+            is_moe = self._parse_moe_layer_name(layer_name) is not None
 
-            single_layer_obj.run()
+            if (not enable_moe_parallel) or (not is_moe):
+                self._run_single_layer(self.single_layer_sim_object_list[idx])
+                idx += 1
+                continue
 
-            if self.verbose:
-                comp_items = single_layer_obj.get_compute_report_items()
-                total_cycles = comp_items[0]
-                comp_cycles = comp_items[1]
-                stall_cycles = comp_items[2]
-                util = comp_items[3]
-                mapping_eff = comp_items[4]
-                print('Total cycles: ' + str(total_cycles))
-                print('Compute cycles: ' + str(comp_cycles))
-                print('Stall cycles: ' + str(stall_cycles))
-                print('Overall utilization: ' + "{:.2f}".format(util) +'%')
-                print('Mapping efficiency: ' + "{:.2f}".format(mapping_eff) +'%')
+            block_start = idx
+            while idx < len(self.single_layer_sim_object_list):
+                name = self.topo.get_layer_name(idx)
+                if self._parse_moe_layer_name(name) is None:
+                    break
+                idx += 1
+            block_end = idx
 
-                avg_bw_items = single_layer_obj.get_bandwidth_report_items()
-                if self.conf.sparsity_support is True:
-                    avg_ifmap_sram_bw = avg_bw_items[0]
-                    avg_filter_sram_bw = avg_bw_items[1]
-                    avg_filter_metadata_sram_bw = avg_bw_items[2]
-                    avg_ofmap_sram_bw = avg_bw_items[3]
-                    avg_ifmap_dram_bw = avg_bw_items[4]
-                    avg_filter_dram_bw = avg_bw_items[5]
-                    avg_ofmap_dram_bw = avg_bw_items[6]
-                else:
-                    avg_ifmap_sram_bw = avg_bw_items[0]
-                    avg_filter_sram_bw = avg_bw_items[1]
-                    avg_ofmap_sram_bw = avg_bw_items[2]
-                    avg_ifmap_dram_bw = avg_bw_items[3]
-                    avg_filter_dram_bw = avg_bw_items[4]
-                    avg_ofmap_dram_bw = avg_bw_items[5]
-
-                print('Average IFMAP SRAM BW: ' + "{:.3f}".format(avg_ifmap_sram_bw) + \
-                      ' words/cycle')
-                print('Average Filter SRAM BW: ' + "{:.3f}".format(avg_filter_sram_bw) + \
-                      ' words/cycle')
-                if self.conf.sparsity_support is True:
-                    print('Average Filter Metadata SRAM BW: ' + \
-                          "{:.3f}".format(avg_filter_metadata_sram_bw) + ' words/cycle')
-                print('Average OFMAP SRAM BW: ' + "{:.3f}".format(avg_ofmap_sram_bw) + \
-                      ' words/cycle')
-                print('Average IFMAP DRAM BW: ' + "{:.3f}".format(avg_ifmap_dram_bw) + \
-                      ' words/cycle')
-                print('Average Filter DRAM BW: ' + "{:.3f}".format(avg_filter_dram_bw) + \
-                      ' words/cycle')
-                print('Average OFMAP DRAM BW: ' + "{:.3f}".format(avg_ofmap_dram_bw) + \
-                      ' words/cycle')
-
-            if self.save_trace:
-                if self.verbose:
-                    print('Saving traces: ', end='')
-                single_layer_obj.save_traces(self.top_path)
-                if self.verbose:
-                    print('Done!')
+            self._run_moe_block_in_parallel(block_start, block_end)
 
         self.all_layer_run_done = True
 

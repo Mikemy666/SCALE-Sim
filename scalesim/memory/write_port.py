@@ -2,6 +2,7 @@
 External DRAM write requests serviced by Ramulator
 """
 import numpy as np
+import threading
 from scalesim.scale_config import scale_config as config
 from bisect import bisect_left
 
@@ -31,6 +32,7 @@ class write_port:
         self.enable_moe_parallel_bank_arb = False
         self.enable_dynamic_bank_alloc = False
         self.layer_name = ''
+        self._service_lock = threading.Lock()
         self._reset_bank_model_state()
 
     def _reset_bank_model_state(self):
@@ -78,7 +80,9 @@ class write_port:
                               enable_bank_model=None,
                               enable_moe_parallel_bank_arb=None,
                               enable_dynamic_bank_alloc=None,
-                              layer_name=''):
+                              request_queue_size=None,
+                              layer_name='',
+                              reset_state=True):
         """
         Optional lightweight control path for bank model parameters.
         """
@@ -94,10 +98,14 @@ class write_port:
         if enable_dynamic_bank_alloc is not None:
             self.enable_dynamic_bank_alloc = bool(enable_dynamic_bank_alloc)
 
+        if request_queue_size is not None:
+            self.request_queue_size = max(1, int(request_queue_size))
+
         if layer_name is not None:
             self.layer_name = str(layer_name)
 
-        self._reset_bank_model_state()
+        if reset_state:
+            self._reset_bank_model_state()
     #
 
     def find_latency(self):
@@ -325,18 +333,19 @@ class write_port:
         roundtrip latency for each transaction reported by 
         Ramulator.
         """
-        if self.enable_bank_model:
-            out_cycles_arr = self._service_with_bank_model(
-                incoming_requests_arr_np=incoming_requests_arr_np,
-                incoming_cycles_arr=incoming_cycles_arr_np
-            )
-            self.stall_cycles = 0
-            return out_cycles_arr
+        with self._service_lock:
+            if self.enable_bank_model:
+                out_cycles_arr = self._service_with_bank_model(
+                    incoming_requests_arr_np=incoming_requests_arr_np,
+                    incoming_cycles_arr=incoming_cycles_arr_np
+                )
+                self.stall_cycles = 0
+                return out_cycles_arr
 
-        return self._service_without_bank_model(
-            incoming_requests_arr_np=incoming_requests_arr_np,
-            incoming_cycles_arr_np=incoming_cycles_arr_np
-        )
+            return self._service_without_bank_model(
+                incoming_requests_arr_np=incoming_requests_arr_np,
+                incoming_cycles_arr_np=incoming_cycles_arr_np
+            )
 
     def get_total_sim_cycles(self):
         """

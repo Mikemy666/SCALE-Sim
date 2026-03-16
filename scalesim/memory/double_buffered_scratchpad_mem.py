@@ -91,7 +91,8 @@ class double_buffered_scratchpad:
                    ifmap_backing_buf_bw=1, filter_backing_buf_bw=1, ofmap_backing_buf_bw=1,
                    ifmap_sram_bank_num=1, ifmap_sram_bank_port=2, filter_sram_bank_num=1, filter_sram_bank_port=2,
                    using_ifmap_custom_layout=False, using_filter_custom_layout=False,
-                   config=cfg(), topo=topo()
+                   config=cfg(), topo=topo(),
+                   reset_bank_model_state=True
                    ):
 
         """
@@ -105,6 +106,8 @@ class double_buffered_scratchpad:
         enable_bank_model = self.config.get_enable_bank_model() if hasattr(self.config, 'get_enable_bank_model') else False
         enable_moe_parallel_bank_arb = self.config.get_enable_moe_parallel_bank_arb() if hasattr(self.config, 'get_enable_moe_parallel_bank_arb') else False
         enable_dynamic_bank_alloc = self.config.get_enable_dynamic_bank_alloc() if hasattr(self.config, 'get_enable_dynamic_bank_alloc') else False
+        rd_request_queue_size = self.config.get_req_buf_sz_rd() if hasattr(self.config, 'get_req_buf_sz_rd') else None
+        wr_request_queue_size = self.config.get_req_buf_sz_wr() if hasattr(self.config, 'get_req_buf_sz_wr') else None
         total_mem_banks = self.config.get_num_bank() if hasattr(self.config, 'get_num_bank') else 16
         # Use a shared IFMAP+FILTER bank pool for memory service arbitration.
         total_read_banks = max(1, int(ifmap_sram_bank_num) + int(filter_sram_bank_num))
@@ -125,7 +128,9 @@ class double_buffered_scratchpad:
                                       enable_bank_model=enable_bank_model,
                                       enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                                       enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                                      layer_name=layer_name
+                                      request_queue_size=rd_request_queue_size,
+                                      layer_name=layer_name,
+                                      reset_bank_model_state=reset_bank_model_state
                                       )
 
             self.filter_buf.set_params(backing_buf_obj=self.filter_port,
@@ -138,7 +143,9 @@ class double_buffered_scratchpad:
                                        enable_bank_model=enable_bank_model,
                                        enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                                        enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                                       layer_name=layer_name
+                                       request_queue_size=rd_request_queue_size,
+                                       layer_name=layer_name,
+                                       reset_bank_model_state=reset_bank_model_state
                                        )
         else:
             self.ifmap_buf = rdbuf()
@@ -167,7 +174,9 @@ class double_buffered_scratchpad:
                                       enable_bank_model=enable_bank_model,
                                       enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                                       enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                                      layer_name=layer_name
+                                      request_queue_size=rd_request_queue_size,
+                                      layer_name=layer_name,
+                                      reset_bank_model_state=reset_bank_model_state
                                       )
 
             self.filter_buf.set_params(backing_buf_obj=self.filter_port,
@@ -182,7 +191,9 @@ class double_buffered_scratchpad:
                                        enable_bank_model=enable_bank_model,
                                        enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                                        enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                                       layer_name=layer_name
+                                       request_queue_size=rd_request_queue_size,
+                                       layer_name=layer_name,
+                                       reset_bank_model_state=reset_bank_model_state
                                        )
 
         self.ofmap_buf.set_params(backing_buf_obj=self.ofmap_port,
@@ -194,7 +205,9 @@ class double_buffered_scratchpad:
                                   enable_bank_model=enable_bank_model,
                                   enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                                   enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                                  layer_name=layer_name)
+                                  request_queue_size=wr_request_queue_size,
+                                  layer_name=layer_name,
+                                  reset_bank_model_state=reset_bank_model_state)
 
         self.verbose = verbose
 
@@ -308,7 +321,8 @@ class double_buffered_scratchpad:
                                               incoming_cycles_arr_np=cycle_arr)
             ofmap_serviced_cycles += [ofmap_cycle_out[0]]
             ofmap_stalls = ofmap_cycle_out[0] - cycle_arr[0]
-
+            # 获取每个 buffer 这一次调用中，由 bank conflict 阻塞的周期数
+            
             ifmap_conflict_blocked = int(self.ifmap_buf.get_last_call_bank_conflict_blocked_cycles()) \
                 if hasattr(self.ifmap_buf, 'get_last_call_bank_conflict_blocked_cycles') else 0
             filter_conflict_blocked = int(self.filter_buf.get_last_call_bank_conflict_blocked_cycles()) \

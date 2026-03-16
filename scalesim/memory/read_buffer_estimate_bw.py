@@ -73,7 +73,9 @@ class ReadBufferEstimateBw:
                    enable_bank_model=False,
                    enable_moe_parallel_bank_arb=False,
                    enable_dynamic_bank_alloc=False,
-                   layer_name=''):
+                   layer_name='',
+                   request_queue_size=None,
+                   reset_bank_model_state=True):
         """
         Method to set the ifmap/filter double buffered memory simulation parameters for estimate
         bandwidth mode.
@@ -115,7 +117,9 @@ class ReadBufferEstimateBw:
                 enable_bank_model=enable_bank_model,
                 enable_moe_parallel_bank_arb=enable_moe_parallel_bank_arb,
                 enable_dynamic_bank_alloc=enable_dynamic_bank_alloc,
-                layer_name=layer_name
+                request_queue_size=request_queue_size,
+                layer_name=layer_name,
+                reset_state=reset_bank_model_state
             )
 
         #

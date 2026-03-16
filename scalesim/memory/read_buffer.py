@@ -61,6 +61,9 @@ class read_buffer:
         self.trace_valid = False
         self.use_ramulator_trace = False
         self.enable_layout_evaluation = False
+        self.num_bank = 1
+        self.num_port = 2
+        self.bw_per_bank = 1
 
     #
     def set_params(self, backing_buf_obj,
@@ -89,11 +92,8 @@ class read_buffer:
         self.req_gen_bandwidth = backing_buf_bw
 
         # Layout modeling
-        self.num_bank = num_bank
-        self.num_port = num_port # number of ports per bank
-        self.bw_per_bank = self.req_gen_bandwidth // self.num_bank # bandwidth per bank
         self.enable_layout_evaluation = enable_layout_evaluation
-        assert self.bw_per_bank * self.num_bank == self.req_gen_bandwidth, f"overall bandwidth must be divisible by total number of banks, number of banks = {self.num_bank}, bandwidth of each as {self.bw_per_bank}, total bandwidth = {self.req_gen_bandwidth}"
+        self._set_bank_topology(num_bank=num_bank, num_port=num_port)
 
         # Ramulator trace
         self.use_ramulator_trace = use_ramulator_trace
@@ -140,6 +140,33 @@ class read_buffer:
         self.hashed_buffer_valid = False
         self.trace_valid = False
         self.use_ramulator_trace = False
+        self.num_bank = 1
+        self.num_port = 2
+        self.bw_per_bank = 1
+
+    def _set_bank_topology(self, num_bank, num_port=None):
+        """
+        Internal helper to update bank/port topology used by layout conflict modeling.
+        """
+        if num_bank is None:
+            num_bank = self.num_bank
+        if num_port is None:
+            num_port = self.num_port
+
+        assert num_bank >= 1, f"number of banks must be >= 1, got {num_bank}"
+        assert num_port >= 1, f"number of ports must be >= 1, got {num_port}"
+
+        self.num_bank = int(num_bank)
+        self.num_port = int(num_port)
+
+        # Use ceil so runtime bank repartition can work even when bandwidth is not divisible.
+        self.bw_per_bank = max(1, int(math.ceil(self.req_gen_bandwidth / self.num_bank)))
+
+    def update_bank_topology(self, num_bank, num_port=None):
+        """
+        Public API to update SRAM bank topology at runtime.
+        """
+        self._set_bank_topology(num_bank=num_bank, num_port=num_port)
 
     #
     def set_fetch_matrix(self, fetch_matrix_np):
@@ -325,6 +352,7 @@ class read_buffer:
                   # because data access in compiled layout turns to be contiguious, which accesses the continuous addresses.
                   # In (contiguous mapping), such multi-bank mapping would result in more bank conflict slowdown.
                   bank_id = column_addr // self.bw_per_bank
+                  bank_id = min(bank_id, self.num_bank - 1)
                   assert bank_id < self.num_bank, f"bank id = {bank_id} for column_addr = {column_addr} needs to be smaller than total number of bank = {self.num_bank}"
                   if line_addr not in concurrent_line_addr[bank_id]:
                       concurrent_line_addr[bank_id].append(line_addr)

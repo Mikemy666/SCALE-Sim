@@ -658,6 +658,60 @@ class double_buffered_scratchpad:
 
         return int(self.static_ifmap_sram_bank_num), int(self.static_filter_sram_bank_num)
 
+    def _get_unique_payload_words(self, trace_matrix):
+        """
+        Count unique valid addresses from a trace matrix payload region.
+        """
+        if trace_matrix is None or trace_matrix.size == 0:
+            return 0
+
+        payload = trace_matrix[:, 1:]
+        if payload.size == 0:
+            return 0
+
+        flat_payload = payload.reshape(-1)
+        valid = flat_payload[flat_payload != -1]
+        if valid.size == 0:
+            return 0
+
+        return int(np.unique(valid).size)
+
+    def get_ifmap_filter_bank_capacity_utilization(self):
+        """
+        Return IFMAP/FILTER bank capacity utilization.
+
+        Utilization definition:
+        used_capacity / (bank_count * per_bank_capacity)
+        """
+        assert self.traces_valid, 'Traces not generated yet'
+
+        final_ifmap_banks, final_filter_banks = self.get_final_ifmap_filter_bank_allocation()
+
+        # Per-bank capacity is derived from configured static banks.
+        ifmap_per_bank_capacity = max(1.0, self.ifmap_buf.total_size_bytes / max(1, self.static_ifmap_sram_bank_num))
+        filter_per_bank_capacity = max(1.0, self.filter_buf.total_size_bytes / max(1, self.static_filter_sram_bank_num))
+
+        ifmap_total_capacity = max(1.0, final_ifmap_banks * ifmap_per_bank_capacity)
+        filter_total_capacity = max(1.0, final_filter_banks * filter_per_bank_capacity)
+
+        ifmap_used_words = self._get_unique_payload_words(self.ifmap_trace_matrix)
+        filter_used_words = self._get_unique_payload_words(self.filter_trace_matrix)
+
+        ifmap_word_size = max(1, int(getattr(self.ifmap_buf, 'word_size', 1)))
+        filter_word_size = max(1, int(getattr(self.filter_buf, 'word_size', 1)))
+
+        ifmap_used_capacity = ifmap_used_words * ifmap_word_size
+        filter_used_capacity = filter_used_words * filter_word_size
+
+        # Cap to 100% as a capacity-utilization metric.
+        ifmap_used_capacity = min(ifmap_used_capacity, ifmap_total_capacity)
+        filter_used_capacity = min(filter_used_capacity, filter_total_capacity)
+
+        ifmap_util = ifmap_used_capacity / ifmap_total_capacity
+        filter_util = filter_used_capacity / filter_total_capacity
+
+        return float(ifmap_util), float(filter_util)
+
     #
     def get_ifmap_sram_start_stop_cycles(self):
         """

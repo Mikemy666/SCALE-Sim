@@ -56,6 +56,8 @@ class single_layer_sim:
         self.mapping_eff = 0
         self.compute_util = 0
         self.final_bank_allocation = '0/0'
+        self.ifmap_bank_capacity_util = 0
+        self.filter_bank_capacity_util = 0
 
         # Report items : BW report
         self.avg_ifmap_sram_bw = 0
@@ -341,6 +343,8 @@ class single_layer_sim:
         self.compute_util = self.compute_system.get_avg_compute_utilization() * 100
         final_ifmap_banks, final_filter_banks = self.memory_system.get_final_ifmap_filter_bank_allocation()
         self.final_bank_allocation = f'{int(final_ifmap_banks)}/{int(final_filter_banks)}'
+        self.ifmap_bank_capacity_util, self.filter_bank_capacity_util = \
+            self.memory_system.get_ifmap_filter_bank_capacity_utilization()
 
         # BW report
         self.ifmap_sram_reads = self.compute_system.get_ifmap_requests()
@@ -406,7 +410,9 @@ class single_layer_sim:
                  self.overall_util,
                  self.mapping_eff,
                  self.compute_util,
-                 self.final_bank_allocation]
+                 self.final_bank_allocation,
+                 self.ifmap_bank_capacity_util * 100,
+                 self.filter_bank_capacity_util * 100]
         return items
 
     #

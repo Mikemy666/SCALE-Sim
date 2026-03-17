@@ -88,6 +88,8 @@ class double_buffered_scratchpad:
         self.dynamic_ifmap_banks = set()
         self.dynamic_filter_banks = set()
         self.dynamic_unassigned_banks = []
+        self.dynamic_target_ifmap_banks = 1
+        self.dynamic_target_filter_banks = 1
 
     #
     def set_params(self,
@@ -193,6 +195,8 @@ class double_buffered_scratchpad:
         self.dynamic_ifmap_banks = set()
         self.dynamic_filter_banks = set()
         self.dynamic_unassigned_banks = []
+        self.dynamic_target_ifmap_banks = 1
+        self.dynamic_target_filter_banks = 1
 
         self.params_valid_flag = True
 
@@ -294,9 +298,38 @@ class double_buffered_scratchpad:
         est_banks = min(total_banks - 1, max(1, est_banks))
         return est_banks
 
+    def _estimate_unique_demand_bytes(self, demand_mat, word_size=1):
+        """
+        Estimate unique demanded payload size in bytes for one operand.
+        """
+        flat_payload = demand_mat.reshape(-1)
+        valid_payload = flat_payload[flat_payload != -1]
+        if valid_payload.size == 0:
+            return 0.0
+        unique_words = np.unique(valid_payload).size
+        return float(unique_words * max(1, int(word_size)))
+
+    def _allocate_towards_target_distribution(self):
+        """
+        Allocate all free banks towards target IFMAP/FILTER distribution.
+        """
+        while len(self.dynamic_unassigned_banks) > 0:
+            deficit_ifmap = max(0, self.dynamic_target_ifmap_banks - len(self.dynamic_ifmap_banks))
+            deficit_filter = max(0, self.dynamic_target_filter_banks - len(self.dynamic_filter_banks))
+
+            if deficit_ifmap == 0 and deficit_filter == 0:
+                break
+
+            if deficit_ifmap > deficit_filter:
+                self._assign_one_dynamic_bank(assign_to_ifmap=True)
+            elif deficit_filter > deficit_ifmap:
+                self._assign_one_dynamic_bank(assign_to_ifmap=False)
+            else:
+                self._assign_one_dynamic_bank(assign_to_ifmap=(len(self.dynamic_ifmap_banks) <= len(self.dynamic_filter_banks)))
+
     def _initialize_dynamic_bank_allocator(self, ifmap_demand_mat, filter_demand_mat):
         """
-        Initialize bank pools and do a demand-proportional warm-start assignment.
+        Initialize bank pools and assign banks to balance capacity utilization.
         """
         total_banks = self.static_ifmap_sram_bank_num + self.static_filter_sram_bank_num
         if total_banks < 2:
@@ -309,72 +342,60 @@ class double_buffered_scratchpad:
         self.dynamic_unassigned_banks = list(range(2, total_banks))
         self._apply_dynamic_bank_topology()
 
-        # Warm-start: estimate pressure from total valid accesses and allocate half of pool.
-        ifmap_total_reqs = int(np.count_nonzero(ifmap_demand_mat != -1))
-        filter_total_reqs = int(np.count_nonzero(filter_demand_mat != -1))
-        total_reqs = ifmap_total_reqs + filter_total_reqs
-        if total_reqs == 0 or len(self.dynamic_unassigned_banks) == 0:
-            return
-
-        target_ifmap = int(round(total_banks * (ifmap_total_reqs / total_reqs)))
-        target_ifmap = min(total_banks - 1, max(1, target_ifmap))
-        target_filter = total_banks - target_ifmap
-
-        warm_assign_budget = len(self.dynamic_unassigned_banks) // 2
-        while warm_assign_budget > 0 and len(self.dynamic_unassigned_banks) > 0:
-            deficit_ifmap = max(0, target_ifmap - len(self.dynamic_ifmap_banks))
-            deficit_filter = max(0, target_filter - len(self.dynamic_filter_banks))
-
-            if deficit_ifmap == 0 and deficit_filter == 0:
-                break
-
-            if deficit_ifmap > deficit_filter:
-                self._assign_one_dynamic_bank(assign_to_ifmap=True)
-            elif deficit_filter > deficit_ifmap:
-                self._assign_one_dynamic_bank(assign_to_ifmap=False)
-            else:
-                self._assign_one_dynamic_bank(assign_to_ifmap=(ifmap_total_reqs >= filter_total_reqs))
-
-            warm_assign_budget -= 1
-
-    def _dynamic_allocate_from_demand(self, ifmap_demand_line, filter_demand_line):
-        """
-        Allocate banks based on current-line demand while preserving exclusivity.
-        """
         if len(self.dynamic_unassigned_banks) == 0:
             return
 
-        total_banks = self.static_ifmap_sram_bank_num + self.static_filter_sram_bank_num
-        req_ifmap = self._estimate_required_banks(ifmap_demand_line,
-                                                  self.ifmap_sram_bank_port,
-                                                  total_banks)
-        req_filter = self._estimate_required_banks(filter_demand_line,
-                                                   self.filter_sram_bank_port,
-                                                   total_banks)
+        ifmap_need_bytes = self._estimate_unique_demand_bytes(ifmap_demand_mat,
+                                                               word_size=getattr(self.ifmap_buf, 'word_size', 1))
+        filter_need_bytes = self._estimate_unique_demand_bytes(filter_demand_mat,
+                                                                word_size=getattr(self.filter_buf, 'word_size', 1))
+
+        ifmap_per_bank_capacity = max(1.0, self.ifmap_buf.total_size_bytes / max(1, self.static_ifmap_sram_bank_num))
+        filter_per_bank_capacity = max(1.0, self.filter_buf.total_size_bytes / max(1, self.static_filter_sram_bank_num))
+
+        ifmap_weight = ifmap_need_bytes / ifmap_per_bank_capacity
+        filter_weight = filter_need_bytes / filter_per_bank_capacity
+
+        if ifmap_weight <= 0 and filter_weight <= 0:
+            ifmap_weight = 1.0
+            filter_weight = 1.0
+
+        target_ifmap = int(round(total_banks * (ifmap_weight / (ifmap_weight + filter_weight))))
+        target_ifmap = min(total_banks - 1, max(1, target_ifmap))
+        target_filter = total_banks - target_ifmap
+
+        self.dynamic_target_ifmap_banks = target_ifmap
+        self.dynamic_target_filter_banks = target_filter
+
+        self._allocate_towards_target_distribution()
 
         while len(self.dynamic_unassigned_banks) > 0:
-            deficit_ifmap = max(0, req_ifmap - len(self.dynamic_ifmap_banks))
-            deficit_filter = max(0, req_filter - len(self.dynamic_filter_banks))
-            if deficit_ifmap == 0 and deficit_filter == 0:
-                break
-
-            if deficit_ifmap > deficit_filter:
+            if ifmap_weight >= filter_weight:
                 self._assign_one_dynamic_bank(assign_to_ifmap=True)
-            elif deficit_filter > deficit_ifmap:
-                self._assign_one_dynamic_bank(assign_to_ifmap=False)
             else:
-                ifmap_reqs = int(np.count_nonzero(ifmap_demand_line != -1))
-                filter_reqs = int(np.count_nonzero(filter_demand_line != -1))
-                self._assign_one_dynamic_bank(assign_to_ifmap=(ifmap_reqs >= filter_reqs))
+                self._assign_one_dynamic_bank(assign_to_ifmap=False)
+
+    def _dynamic_allocate_from_demand(self, ifmap_demand_line, filter_demand_line):
+        """
+        Allocate remaining banks towards precomputed target distribution.
+        """
+        if len(self.dynamic_unassigned_banks) == 0:
+            return
+        self._allocate_towards_target_distribution()
 
     def _dynamic_allocate_from_stall_feedback(self, ifmap_stall, filter_stall):
         """
-        Allocate one extra bank to the side with larger stall pressure.
+        Allocate one extra bank only when target distribution is not yet reached.
         """
         if len(self.dynamic_unassigned_banks) == 0:
             return
 
         if ifmap_stall <= 0 and filter_stall <= 0:
+            return
+
+        deficit_ifmap = max(0, self.dynamic_target_ifmap_banks - len(self.dynamic_ifmap_banks))
+        deficit_filter = max(0, self.dynamic_target_filter_banks - len(self.dynamic_filter_banks))
+        if deficit_ifmap == 0 and deficit_filter == 0:
             return
 
         if ifmap_stall > filter_stall:

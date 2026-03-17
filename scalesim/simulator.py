@@ -202,6 +202,19 @@ class simulator:
         header += 'DRAM OFMAP Start Cycle, DRAM OFMAP Stop Cycle, DRAM OFMAP Writes,\n'
         detail_report.write(header)
 
+        bank_model_report = None
+        if self.conf.get_enable_bank_model():
+            bank_model_report_name = self.top_path + '/BANK_MODEL_REPORT.csv'
+            bank_model_report = open(bank_model_report_name, 'w')
+            header = 'LayerID, EnableBankModel, EnableDynamic, '
+            header += 'total_banknum, ifmap_banknum, filter_banknum, ofmap_banknum, allocation_ratio, '
+            header += 'bank_capacity_kb, ifmap_total_capacity_kb, filter_total_capacity_kb, ofmap_total_capacity_kb, '
+            header += 'ifmap_elements, filter_elements, ofmap_elements, '
+            header += 'ifmap_capacity_utilization, filter_capacity_utilization, ofmap_capacity_utilization, '
+            header += 'ifmap_bank_conflict_delay, filter_bank_conflict_delay, ofmap_bank_conflict_delay, total_bank_conflict_delay, '
+            header += 'total_cycles, stall_cycles_due_to_bank_conflict,\n'
+            bank_model_report.write(header)
+
         if self.conf.sparsity_support is True:
             sparse_report_name = self.top_path + '/SPARSE_REPORT.csv'
             sparse_report = open(sparse_report_name, 'w')
@@ -263,12 +276,45 @@ class simulator:
                 log += ',\n'
                 sparse_report.write(log)
 
+            if self.conf.get_enable_bank_model() and bank_model_report is not None:
+                bank_items = single_layer_obj.get_bank_report_items()
+                log = str(lid) + ', '
+                log += ', '.join([
+                    str(bank_items.get('EnableBankModel', False)),
+                    str(bank_items.get('EnableDynamic', False)),
+                    str(bank_items.get('total_banknum', 0)),
+                    str(bank_items.get('ifmap_banknum', 0)),
+                    str(bank_items.get('filter_banknum', 0)),
+                    str(bank_items.get('ofmap_banknum', 0)),
+                    str(bank_items.get('allocation_ratio', '0:0:0')),
+                    str(bank_items.get('bank_capacity_kb', 0)),
+                    str(bank_items.get('ifmap_total_capacity_kb', 0)),
+                    str(bank_items.get('filter_total_capacity_kb', 0)),
+                    str(bank_items.get('ofmap_total_capacity_kb', 0)),
+                    str(bank_items.get('ifmap_elements', 0)),
+                    str(bank_items.get('filter_elements', 0)),
+                    str(bank_items.get('ofmap_elements', 0)),
+                    str(bank_items.get('ifmap_capacity_utilization', 0)),
+                    str(bank_items.get('filter_capacity_utilization', 0)),
+                    str(bank_items.get('ofmap_capacity_utilization', 0)),
+                    str(bank_items.get('ifmap_bank_conflict_delay', 0)),
+                    str(bank_items.get('filter_bank_conflict_delay', 0)),
+                    str(bank_items.get('ofmap_bank_conflict_delay', 0)),
+                    str(bank_items.get('total_bank_conflict_delay', 0)),
+                    str(bank_items.get('total_cycles', 0)),
+                    str(bank_items.get('stall_cycles_due_to_bank_conflict', 0)),
+                ])
+                log += ',\n'
+                bank_model_report.write(log)
+
         compute_report.close()
         bandwidth_report.close()
         detail_report.close()
         time_report.close()
         if self.conf.sparsity_support is True:
             sparse_report.close()
+        if bank_model_report is not None:
+            bank_model_report.close()
 
     #
     def get_total_cycles(self):

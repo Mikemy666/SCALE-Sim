@@ -16,6 +16,7 @@ from scalesim.compute.systolic_compute_os import systolic_compute_os
 from scalesim.compute.systolic_compute_ws import systolic_compute_ws
 from scalesim.compute.systolic_compute_is import systolic_compute_is
 from scalesim.memory.double_buffered_scratchpad_mem import double_buffered_scratchpad as mem_dbsp
+from scalesim.memory import banked_memory_system
 
 class single_layer_sim:
     """
@@ -34,9 +35,10 @@ class single_layer_sim:
 
         self.op_mat_obj = opmat()
         self.compute_system = systolic_compute_os()
-        self.memory_system = mem_dbsp()
+        self.memory_system = banked_memory_system()
 
         self.verbose = True
+        self.enable_bank_model = False
 
         self.sparsity_ratio_N = 1
         self.sparsity_ratio_M = 1
@@ -102,6 +104,9 @@ class single_layer_sim:
         self.using_ifmap_custom_layout = True
         self.using_filter_custom_layout = True
 
+        # Bank-model report items
+        self.bank_report_items = {}
+
     def set_params(self,
                    layer_id=0,
                    config_obj=cfg(), topology_obj=topo(), layout_obj=layout(),
@@ -139,6 +144,7 @@ class single_layer_sim:
 
         self.num_mac_unit = arr_dims[0] * arr_dims[1]
         self.verbose=verbose
+        self.enable_bank_model = self.config.get_enable_bank_model()
 
         self.sparsity_ratio_N, self.sparsity_ratio_M = \
             self.topo.get_layer_sparsity_ratio(self.layer_id)
@@ -147,10 +153,11 @@ class single_layer_sim:
 
     # This communicates that the memory is being managed externally
     # And the class will not interfere with setting it up
-    def set_memory_system(self, mem_sys_obj=mem_dbsp()):
+    def set_memory_system(self, mem_sys_obj=None):
         """
         Method to explicitely set the memory system.
         """
+        assert mem_sys_obj is not None, 'Please provide a valid memory system object'
         self.memory_system = mem_sys_obj
         self.memory_system_ready_flag = True
 
@@ -238,54 +245,66 @@ class single_layer_sim:
             word_size = 1           # bytes, this can be incorporated in the config file
             active_buf_frac = 0.5   # This can be incorporated in the config as well
 
-            ifmap_buf_size_kb, filter_buf_size_kb, ofmap_buf_size_kb = self.config.get_mem_sizes()
-            ifmap_buf_size_bytes = 1024 * ifmap_buf_size_kb
-            filter_buf_size_bytes = 1024 * filter_buf_size_kb
-            ofmap_buf_size_bytes = 1024 * ofmap_buf_size_kb
-
-            ifmap_backing_bw = 1
-            filter_backing_bw = 1
-            ofmap_backing_bw = 1
-            estimate_bandwidth_mode = False
-            if self.config.use_user_dram_bandwidth():
-                bws = self.config.get_bandwidths_as_list()
-                ifmap_backing_bw = self.config.ifmap_sram_bank_bandwidth
-                filter_backing_bw = self.config.filter_sram_bank_bandwidth
-                ofmap_backing_bw = bws[0]
-
-            else:
-                arr_row, arr_col = self.config.get_array_dims()
-                estimate_bandwidth_mode = True
-
-                # The number 10 elems per cycle is arbitrary
-                ifmap_backing_bw = 10
-                filter_backing_bw = 10
-                ofmap_backing_bw = arr_col
-
-            self.memory_system.set_params(
-                    layer_id = self.layer_id,
+            if self.enable_bank_model:
+                self.memory_system = banked_memory_system()
+                self.memory_system.set_params(
+                    layer_id=self.layer_id,
                     word_size=word_size,
-                    ifmap_buf_size_bytes=ifmap_buf_size_bytes,
-                    filter_buf_size_bytes=filter_buf_size_bytes,
-                    ofmap_buf_size_bytes=ofmap_buf_size_bytes,
-                    rd_buf_active_frac=active_buf_frac, wr_buf_active_frac=active_buf_frac,
-                    ifmap_backing_buf_bw=ifmap_backing_bw,
-                    filter_backing_buf_bw=filter_backing_bw,
-                    ofmap_backing_buf_bw=ofmap_backing_bw,
                     verbose=self.verbose,
-                    ifmap_sram_bank_num=self.config.ifmap_sram_bank_num,
-                    ifmap_sram_bank_port=self.config.ifmap_sram_bank_port,
-                    filter_sram_bank_num=self.config.filter_sram_bank_num,
-                    filter_sram_bank_port=self.config.filter_sram_bank_port,
-                    using_ifmap_custom_layout=self.using_ifmap_custom_layout,
-                    using_filter_custom_layout=self.using_filter_custom_layout,
-                    estimate_bandwidth_mode=estimate_bandwidth_mode,
                     config=self.config,
                     topo=self.topo
-            )
+                )
+            else:
+                self.memory_system = mem_dbsp()
+
+                ifmap_buf_size_kb, filter_buf_size_kb, ofmap_buf_size_kb = self.config.get_mem_sizes()
+                ifmap_buf_size_bytes = 1024 * ifmap_buf_size_kb
+                filter_buf_size_bytes = 1024 * filter_buf_size_kb
+                ofmap_buf_size_bytes = 1024 * ofmap_buf_size_kb
+
+                ifmap_backing_bw = 1
+                filter_backing_bw = 1
+                ofmap_backing_bw = 1
+                estimate_bandwidth_mode = False
+                if self.config.use_user_dram_bandwidth():
+                    bws = self.config.get_bandwidths_as_list()
+                    ifmap_backing_bw = self.config.ifmap_sram_bank_bandwidth
+                    filter_backing_bw = self.config.filter_sram_bank_bandwidth
+                    ofmap_backing_bw = bws[0]
+
+                else:
+                    arr_row, arr_col = self.config.get_array_dims()
+                    estimate_bandwidth_mode = True
+
+                    # The number 10 elems per cycle is arbitrary
+                    ifmap_backing_bw = 10
+                    filter_backing_bw = 10
+                    ofmap_backing_bw = arr_col
+
+                self.memory_system.set_params(
+                        layer_id = self.layer_id,
+                        word_size=word_size,
+                        ifmap_buf_size_bytes=ifmap_buf_size_bytes,
+                        filter_buf_size_bytes=filter_buf_size_bytes,
+                        ofmap_buf_size_bytes=ofmap_buf_size_bytes,
+                        rd_buf_active_frac=active_buf_frac, wr_buf_active_frac=active_buf_frac,
+                        ifmap_backing_buf_bw=ifmap_backing_bw,
+                        filter_backing_buf_bw=filter_backing_bw,
+                        ofmap_backing_buf_bw=ofmap_backing_bw,
+                        verbose=self.verbose,
+                        ifmap_sram_bank_num=self.config.ifmap_sram_bank_num,
+                        ifmap_sram_bank_port=self.config.ifmap_sram_bank_port,
+                        filter_sram_bank_num=self.config.filter_sram_bank_num,
+                        filter_sram_bank_port=self.config.filter_sram_bank_port,
+                        using_ifmap_custom_layout=self.using_ifmap_custom_layout,
+                        using_filter_custom_layout=self.using_filter_custom_layout,
+                        estimate_bandwidth_mode=estimate_bandwidth_mode,
+                        config=self.config,
+                        topo=self.topo
+                )
 
         # 2.2 Install the prefetch matrices to the read buffers to finish setup
-        if self.config.use_user_dram_bandwidth() :
+        if (not self.enable_bank_model) and self.config.use_user_dram_bandwidth() :
             self.memory_system.set_read_buf_prefetch_matrices(
                                                         ifmap_prefetch_mat=ifmap_prefetch_mat,
                                                         filter_prefetch_mat=filter_prefetch_mat
@@ -334,7 +353,8 @@ class single_layer_sim:
         # Compute report
         self.total_cycles = self.memory_system.get_total_compute_cycles()# - self.memory_system.get_stall_cycles()
         self.stall_cycles = self.memory_system.get_stall_cycles()
-        self.overall_util = (self.num_compute * 100) / (self.total_cycles * self.num_mac_unit)
+        effective_total_cycles = max(self.total_cycles, 1)
+        self.overall_util = (self.num_compute * 100) / (effective_total_cycles * self.num_mac_unit)
         self.mapping_eff = self.compute_system.get_avg_mapping_efficiency() * 100
         self.compute_util = self.compute_system.get_avg_compute_utilization() * 100
 
@@ -342,12 +362,12 @@ class single_layer_sim:
         self.ifmap_sram_reads = self.compute_system.get_ifmap_requests()
         self.filter_sram_reads = self.compute_system.get_filter_requests()
         self.ofmap_sram_writes = self.compute_system.get_ofmap_requests()
-        self.avg_ifmap_sram_bw = self.ifmap_sram_reads / self.total_cycles
+        self.avg_ifmap_sram_bw = self.ifmap_sram_reads / effective_total_cycles
 
-        self.avg_filter_sram_bw = self.filter_sram_reads / self.total_cycles
-        self.avg_filter_metadata_sram_bw = self.metadata_reads / self.total_cycles
+        self.avg_filter_sram_bw = self.filter_sram_reads / effective_total_cycles
+        self.avg_filter_metadata_sram_bw = self.metadata_reads / effective_total_cycles
 
-        self.avg_ofmap_sram_bw = self.ofmap_sram_writes / self.total_cycles
+        self.avg_ofmap_sram_bw = self.ofmap_sram_writes / effective_total_cycles
 
         # Detail report
         self.ifmap_sram_start_cycle, self.ifmap_sram_stop_cycle \
@@ -367,16 +387,27 @@ class single_layer_sim:
 
         self.ofmap_dram_start_cycle, self.ofmap_dram_stop_cycle, self.ofmap_dram_writes \
             = self.memory_system.get_ofmap_dram_details()
-        
-        self.overall_cycles = int(self.ofmap_dram_stop_cycle - min(self.ifmap_dram_start_cycle,self.filter_dram_start_cycle))
+
+        if self.enable_bank_model:
+            self.overall_cycles = int(self.total_cycles)
+        else:
+            self.overall_cycles = int(self.ofmap_dram_stop_cycle - min(self.ifmap_dram_start_cycle,self.filter_dram_start_cycle))
         
         # BW calc for DRAM access
-        self.avg_ifmap_dram_bw = self.ifmap_dram_reads / \
-                                (self.ifmap_dram_stop_cycle - self.ifmap_dram_start_cycle + 1)
-        self.avg_filter_dram_bw = self.filter_dram_reads / \
-                                (self.filter_dram_stop_cycle - self.filter_dram_start_cycle + 1)
-        self.avg_ofmap_dram_bw = self.ofmap_dram_writes / \
-                                (self.ofmap_dram_stop_cycle - self.ofmap_dram_start_cycle + 1)
+        if self.enable_bank_model:
+            self.avg_ifmap_dram_bw = 0
+            self.avg_filter_dram_bw = 0
+            self.avg_ofmap_dram_bw = 0
+        else:
+            self.avg_ifmap_dram_bw = self.ifmap_dram_reads / \
+                                    (self.ifmap_dram_stop_cycle - self.ifmap_dram_start_cycle + 1)
+            self.avg_filter_dram_bw = self.filter_dram_reads / \
+                                    (self.filter_dram_stop_cycle - self.filter_dram_start_cycle + 1)
+            self.avg_ofmap_dram_bw = self.ofmap_dram_writes / \
+                                    (self.ofmap_dram_stop_cycle - self.ofmap_dram_start_cycle + 1)
+
+        if self.enable_bank_model and hasattr(self.memory_system, 'get_bank_report_dict'):
+            self.bank_report_items = self.memory_system.get_bank_report_dict()
 
         self.report_items_ready = True
 
@@ -453,3 +484,11 @@ class single_layer_sim:
         items += [self.avg_filter_metadata_sram_bw]
 
         return items
+
+    def get_bank_report_items(self):
+        """
+        Method to fetch per-layer bank-model report fields.
+        """
+        if not self.report_items_ready:
+            self.calc_report_data()
+        return self.bank_report_items

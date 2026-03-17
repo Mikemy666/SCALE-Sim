@@ -46,6 +46,7 @@ class scale_config:
         self.filter_sram_bank_bandwidth = 10
         self.filter_sram_bank_num = 10
         self.filter_sram_bank_port = 2
+        self.ofmap_sram_bank_num = 1
 
         self.valid_df_list = ['os', 'ws', 'is']
 
@@ -59,6 +60,10 @@ class scale_config:
     
     # Sarbartha: Added ramulator based DRAM trace support
         self.use_ramulator_trace = False
+
+        # Bank-conflict-only memory model controls
+        self.enable_bank_model = False
+        self.enable_dynamic = False
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -101,6 +106,12 @@ class scale_config:
             self.time_linear_model = config.get(section, 'TimeLinearModel')
             assert self.time_linear_model in ['None', 'TPUv4', 'TPUv5e', 'TPUv6e'], f"ERROR: Invalid time linear model '{self.time_linear_model}'. Must be one of: None, TPUv4, TPUv5e, TPUv6e"
 
+        # Optional bank model switches
+        if config.has_option(section, 'EnableBankModel'):
+            self.enable_bank_model = config.getboolean(section, 'EnableBankModel')
+        if config.has_option(section, 'EnableDynamic'):
+            self.enable_dynamic = config.getboolean(section, 'EnableDynamic')
+
 
         # TODO Sarbartha: Should be bw
         div_factor = 1
@@ -131,6 +142,10 @@ class scale_config:
         self.filter_sram_bank_bandwidth = int(config.get(layout_section, 'FilterSRAMBankBandwidth'))
         self.filter_sram_bank_num = int(config.get(layout_section, 'FilterSRAMBankNum'))
         self.filter_sram_bank_port = int(config.get(layout_section, 'FilterSRAMBankPort'))
+        if config.has_option(layout_section, 'OfmapSRAMBankNum'):
+            self.ofmap_sram_bank_num = int(config.get(layout_section, 'OfmapSRAMBankNum'))
+        else:
+            self.ofmap_sram_bank_num = 1
         
         # Anand: ISSUE #2. Patch
         if self.use_user_bandwidth:
@@ -244,6 +259,8 @@ class scale_config:
         config.set(section, 'InterfaceBandwidth', str(bw_mode))
         config.set(section, 'UseRamulatorTrace', str(self.use_ramulator_trace))
         config.set(section, 'TimeLinearModel', str(self.time_linear_model))
+        config.set(section, 'EnableBankModel', str(self.enable_bank_model))
+        config.set(section, 'EnableDynamic', str(self.enable_dynamic))
 
         with open(conf_file_out, 'w') as configfile:
             config.write(configfile)
@@ -515,6 +532,38 @@ class scale_config:
         if self.valid_conf_flag:
             return self.time_linear_model
         return "Default"
+
+    def get_enable_bank_model(self):
+        """
+        Method to check if the pure bank-conflict memory model is enabled.
+        """
+        if self.valid_conf_flag:
+            return self.enable_bank_model
+        return False
+
+    def get_enable_dynamic(self):
+        """
+        Method to check if dynamic bank allocation is enabled.
+        """
+        if self.valid_conf_flag:
+            return self.enable_dynamic
+        return False
+
+    def get_bank_allocation(self):
+        """
+        Method to get static bank allocation tuple in config order.
+        """
+        if self.valid_conf_flag:
+            return self.ifmap_sram_bank_num, self.filter_sram_bank_num, self.ofmap_sram_bank_num
+        return 0, 0, 0
+
+    def get_total_banknum(self):
+        """
+        Method to get total number of configured SRAM banks.
+        """
+        if self.valid_conf_flag:
+            return self.ifmap_sram_bank_num + self.filter_sram_bank_num + self.ofmap_sram_bank_num
+        return 0
     
     # FIX ISSUE #14
     @staticmethod

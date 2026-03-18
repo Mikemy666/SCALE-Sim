@@ -44,7 +44,7 @@ class BankAllocator:
         if self.total_banknum < 3:
             raise ValueError("Dynamic mode requires total_banknum >= 3 to keep min 1 bank/tensor")
 
-        ifmap_e = int(element_counts["ifmap"])
+        ifmap_e = int(element_counts["ifmap"]) # 动态分配下的权重占比
         filter_e = int(element_counts["filter"])
         ofmap_e = int(element_counts["ofmap"])
         total_elements = ifmap_e + filter_e + ofmap_e
@@ -53,19 +53,20 @@ class BankAllocator:
             self._validate_counts(static_counts)
             return static_counts
 
-        ideals = {
+        ideals = { # 按照权重的动态比例计算每个tensor理想的bank数量（可以是小数）
             "ifmap": self.total_banknum * (ifmap_e / total_elements),
             "filter": self.total_banknum * (filter_e / total_elements),
             "ofmap": self.total_banknum * (ofmap_e / total_elements),
         }
 
-        counts = {
+        counts = { # 向下取整但至少有一个bank
             t: max(1, int(np.floor(ideals[t])))
             for t in self.TENSORS
         }
 
         current_sum = sum(counts.values())
 
+        # 如果此时bank总数小于total_banknum，则按照小数部分从大到小分配剩余bank；如果大于total_banknum，则从bank数最多的tensor开始减少，直到满足总数要求。
         if current_sum < self.total_banknum:
             remainders = sorted(
                 self.TENSORS,
@@ -94,7 +95,7 @@ class BankAllocator:
         return counts
 
 
-class TensorBankModel:
+class TensorBankModel: # 这个类只管每个矩阵自己的冲突，三个矩阵之间的加载快慢由系统层进行处理
     """Per-tensor bank conflict simulator with one request per bank per cycle."""
 
     def __init__(self, name, bank_base, bank_count):
@@ -104,18 +105,18 @@ class TensorBankModel:
         if self.bank_count < 1:
             raise ValueError(f"{name} bank_count must be >= 1")
 
-        self.next_free_cycle = np.zeros((self.bank_count,), dtype=int)
+        self.next_free_cycle = np.zeros((self.bank_count,), dtype=int)# 每个bank下一次可用的cycle，初始为0，表示从第0周期开始就可以访问
         self.total_conflict_delay = 0
         self.total_requests = 0
 
-        self.per_bank_access = {
+        self.per_bank_access = { # 记录每个bank被访问了多少次
             self.bank_base + i: 0
             for i in range(self.bank_count)
         }
 
         self.serviced_cycle_per_line = []
 
-    def service_line(self, req_cycle, demand_line):
+    def service_line(self, req_cycle, demand_line): # 输入当前请求的周期和这一行的地址需求，输出这一行被完全服务的周期和这一行的延迟
         line_service_cycle = int(req_cycle)
 
         for raw_addr in demand_line:
@@ -197,6 +198,12 @@ class banked_memory_system:
         self.filter_elements = 0
         self.ofmap_elements = 0
 
+        # Optional inputs used to make dynamic allocation conflict-aware
+        self.request_counts = None
+        self.ifmap_demand_for_alloc = None
+        self.filter_demand_for_alloc = None
+        self.ofmap_demand_for_alloc = None
+
     def _compute_tensor_elements(self):
         ifmap_h, ifmap_w = self.topo.get_layer_ifmap_dims(layer_id=self.layer_id)
         filter_h, filter_w = self.topo.get_layer_filter_dims(layer_id=self.layer_id)
@@ -207,6 +214,29 @@ class banked_memory_system:
         self.ifmap_elements = int(ifmap_h) * int(ifmap_w) * int(num_ch)
         self.filter_elements = int(filter_h) * int(filter_w) * int(num_ch) * int(num_filters)
         self.ofmap_elements = int(ofmap_elements)
+
+    def _estimate_stall_for_counts(self, counts):
+        """Estimate global stall with the same service policy for a candidate allocation."""
+        if self.ifmap_demand_for_alloc is None or self.filter_demand_for_alloc is None or self.ofmap_demand_for_alloc is None:
+            return None
+
+        ifmap_model = TensorBankModel("ifmap", bank_base=0, bank_count=int(counts["ifmap"]))
+        filter_model = TensorBankModel("filter", bank_base=0, bank_count=int(counts["filter"]))
+        ofmap_model = TensorBankModel("ofmap", bank_base=0, bank_count=int(counts["ofmap"]))
+
+        num_lines = int(self.ofmap_demand_for_alloc.shape[0])
+        stall_cycles = 0
+
+        for req_line in range(num_lines):
+            req_cycle = int(req_line + stall_cycles)
+
+            _, ifmap_delay = ifmap_model.service_line(req_cycle, self.ifmap_demand_for_alloc[req_line, :])
+            _, filter_delay = filter_model.service_line(req_cycle, self.filter_demand_for_alloc[req_line, :])
+            _, ofmap_delay = ofmap_model.service_line(req_cycle, self.ofmap_demand_for_alloc[req_line, :])
+
+            stall_cycles += int(max(ifmap_delay, filter_delay, ofmap_delay))
+
+        return int(stall_cycles)
 
     def _build_allocation(self):
         static_counts = {
@@ -229,7 +259,25 @@ class banked_memory_system:
             "filter": self.filter_elements,
             "ofmap": self.ofmap_elements,
         }
-        counts = allocator.allocate(static_counts=static_counts, element_counts=element_counts)
+
+        # Dynamic allocation should follow request pressure (conflict source) when available.
+        allocation_weights = dict(element_counts)
+        if self.enable_dynamic and isinstance(self.request_counts, dict):
+            allocation_weights = {
+                "ifmap": int(self.request_counts.get("ifmap", element_counts["ifmap"])),
+                "filter": int(self.request_counts.get("filter", element_counts["filter"])),
+                "ofmap": int(self.request_counts.get("ofmap", element_counts["ofmap"])),
+            }
+
+        dynamic_counts = allocator.allocate(static_counts=static_counts, element_counts=allocation_weights)
+        counts = dict(dynamic_counts)
+
+        # Safety net: if dynamic estimate is worse than static under the same conflict model, fallback.
+        if self.enable_dynamic and dynamic_counts != static_counts:
+            static_stall = self._estimate_stall_for_counts(static_counts)
+            dynamic_stall = self._estimate_stall_for_counts(dynamic_counts)
+            if static_stall is not None and dynamic_stall is not None and dynamic_stall > static_stall:
+                counts = dict(static_counts)
 
         ifmap_base = 0
         filter_base = counts["ifmap"]
@@ -272,6 +320,11 @@ class banked_memory_system:
 
         self.enable_bank_model = bool(self.config.get_enable_bank_model())
         self.enable_dynamic = bool(self.config.get_enable_dynamic())
+
+        self.request_counts = kwargs.get("request_counts", None)
+        self.ifmap_demand_for_alloc = kwargs.get("ifmap_demand_mat", None)
+        self.filter_demand_for_alloc = kwargs.get("filter_demand_mat", None)
+        self.ofmap_demand_for_alloc = kwargs.get("ofmap_demand_mat", None)
 
         self._compute_tensor_elements()
         self._build_allocation()

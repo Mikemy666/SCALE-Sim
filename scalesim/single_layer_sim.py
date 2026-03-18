@@ -236,6 +236,12 @@ class single_layer_sim:
             filter_prefetch_mat = self.op_mat_obj.get_filter_prefetch_matrix_custom_layout()
     
         ifmap_demand_mat, filter_demand_mat, ofmap_demand_mat = self.compute_system.get_demand_matrices()
+
+        request_counts = {
+            'ifmap': int(np.count_nonzero(ifmap_demand_mat != -1)),
+            'filter': int(np.count_nonzero(filter_demand_mat != -1)),
+            'ofmap': int(np.count_nonzero(ofmap_demand_mat != -1)),
+        }
         #print('DEBUG: Compute operations done')
         # 2. Setup the memory system and run the demands through it to find any memory bottleneck and generate traces
 
@@ -252,7 +258,11 @@ class single_layer_sim:
                     word_size=word_size,
                     verbose=self.verbose,
                     config=self.config,
-                    topo=self.topo
+                    topo=self.topo,
+                    request_counts=request_counts,
+                    ifmap_demand_mat=ifmap_demand_mat,
+                    filter_demand_mat=filter_demand_mat,
+                    ofmap_demand_mat=ofmap_demand_mat,
                 )
             else:
                 self.memory_system = mem_dbsp()

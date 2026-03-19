@@ -64,6 +64,7 @@ class scale_config:
         # Bank-conflict-only memory model controls
         self.enable_bank_model = False
         self.enable_dynamic = False
+        self.bank_conflict_penalty = 1
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -111,6 +112,8 @@ class scale_config:
             self.enable_bank_model = config.getboolean(section, 'EnableBankModel')
         if config.has_option(section, 'EnableDynamic'):
             self.enable_dynamic = config.getboolean(section, 'EnableDynamic')
+        if config.has_option(section, 'BankConflictPenalty'):
+            self.bank_conflict_penalty = max(1, config.getint(section, 'BankConflictPenalty'))
 
 
         # TODO Sarbartha: Should be bw
@@ -261,6 +264,7 @@ class scale_config:
         config.set(section, 'TimeLinearModel', str(self.time_linear_model))
         config.set(section, 'EnableBankModel', str(self.enable_bank_model))
         config.set(section, 'EnableDynamic', str(self.enable_dynamic))
+        config.set(section, 'BankConflictPenalty', str(self.bank_conflict_penalty))
 
         with open(conf_file_out, 'w') as configfile:
             config.write(configfile)
@@ -548,6 +552,14 @@ class scale_config:
         if self.valid_conf_flag:
             return self.enable_dynamic
         return False
+
+    def get_bank_conflict_penalty(self):
+        """
+        Method to get the bank conflict penalty factor in cycles per request.
+        """
+        if self.valid_conf_flag:
+            return max(1, int(self.bank_conflict_penalty))
+        return 1
 
     def get_bank_allocation(self):
         """

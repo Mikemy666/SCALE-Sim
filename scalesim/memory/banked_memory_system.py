@@ -98,10 +98,11 @@ class BankAllocator:
 class TensorBankModel: # 这个类只管每个矩阵自己的冲突，三个矩阵之间的加载快慢由系统层进行处理
     """Per-tensor bank conflict simulator with one request per bank per cycle."""
 
-    def __init__(self, name, bank_base, bank_count):
+    def __init__(self, name, bank_base, bank_count, service_cycles=1):
         self.name = name
         self.bank_base = int(bank_base)
         self.bank_count = int(bank_count)
+        self.service_cycles = max(1, int(service_cycles))
         if self.bank_count < 1:
             raise ValueError(f"{name} bank_count must be >= 1")
 
@@ -129,7 +130,8 @@ class TensorBankModel: # 这个类只管每个矩阵自己的冲突，三个矩�
 
             available_cycle = int(self.next_free_cycle[local_bank])
             service_cycle = max(int(req_cycle), available_cycle)
-            self.next_free_cycle[local_bank] = service_cycle + 1
+            # Each request occupies a bank for service_cycles cycles.
+            self.next_free_cycle[local_bank] = service_cycle + self.service_cycles
 
             self.total_conflict_delay += (service_cycle - int(req_cycle))
             self.total_requests += 1
@@ -193,6 +195,7 @@ class banked_memory_system:
         self.allocation = None
         self.total_banknum = 0
         self.bank_capacity_kb = 0.0
+        self.bank_conflict_penalty = 1
 
         self.ifmap_elements = 0
         self.filter_elements = 0
@@ -204,7 +207,7 @@ class banked_memory_system:
         self.filter_demand_for_alloc = None
         self.ofmap_demand_for_alloc = None
 
-    def _compute_tensor_elements(self):
+    def _compute_tensor_elements(self): # 根据topology和layer_id计算当前层的ifmap/filter/ofmap元素数量，作为动态分配的权重输入
         ifmap_h, ifmap_w = self.topo.get_layer_ifmap_dims(layer_id=self.layer_id)
         filter_h, filter_w = self.topo.get_layer_filter_dims(layer_id=self.layer_id)
         num_ch = self.topo.get_layer_num_channels(layer_id=self.layer_id)
@@ -215,14 +218,29 @@ class banked_memory_system:
         self.filter_elements = int(filter_h) * int(filter_w) * int(num_ch) * int(num_filters)
         self.ofmap_elements = int(ofmap_elements)
 
-    def _estimate_stall_for_counts(self, counts):
+    def _estimate_stall_for_counts(self, counts): # 根据给定的bank数量估算全局stall周期数，用于动态分配的安全网判断
         """Estimate global stall with the same service policy for a candidate allocation."""
         if self.ifmap_demand_for_alloc is None or self.filter_demand_for_alloc is None or self.ofmap_demand_for_alloc is None:
             return None
 
-        ifmap_model = TensorBankModel("ifmap", bank_base=0, bank_count=int(counts["ifmap"]))
-        filter_model = TensorBankModel("filter", bank_base=0, bank_count=int(counts["filter"]))
-        ofmap_model = TensorBankModel("ofmap", bank_base=0, bank_count=int(counts["ofmap"]))
+        ifmap_model = TensorBankModel( # 构建一个临时的bank模型来估算在这个分配下的stall周期数，注意这里的service_cycles是bank_conflict_penalty，因为我们只关心bank冲突引起的stall
+            "ifmap",
+            bank_base=0,
+            bank_count=int(counts["ifmap"]),
+            service_cycles=self.bank_conflict_penalty,
+        )
+        filter_model = TensorBankModel( # 构建一个临时的bank模型来估算在这个分配下的stall周期数，注意这里的service_cycles是bank_conflict_penalty，因为我们只关心bank冲突引起的stall
+            "filter",
+            bank_base=0,
+            bank_count=int(counts["filter"]),
+            service_cycles=self.bank_conflict_penalty,
+        )
+        ofmap_model = TensorBankModel(
+            "ofmap",
+            bank_base=0,
+            bank_count=int(counts["ofmap"]),
+            service_cycles=self.bank_conflict_penalty,
+        )
 
         num_lines = int(self.ofmap_demand_for_alloc.shape[0])
         stall_cycles = 0
@@ -299,16 +317,19 @@ class banked_memory_system:
             "ifmap",
             bank_base=self.allocation["ifmap"]["base"],
             bank_count=self.allocation["ifmap"]["count"],
+            service_cycles=self.bank_conflict_penalty,
         )
         self.filter_model = TensorBankModel(
             "filter",
             bank_base=self.allocation["filter"]["base"],
             bank_count=self.allocation["filter"]["count"],
+            service_cycles=self.bank_conflict_penalty,
         )
         self.ofmap_model = TensorBankModel(
             "ofmap",
             bank_base=self.allocation["ofmap"]["base"],
             bank_count=self.allocation["ofmap"]["count"],
+            service_cycles=self.bank_conflict_penalty,
         )
 
     def set_params(self, layer_id=0, word_size=1, verbose=True, config=cfg(), topo=topo(), **kwargs):
@@ -320,12 +341,14 @@ class banked_memory_system:
 
         self.enable_bank_model = bool(self.config.get_enable_bank_model())
         self.enable_dynamic = bool(self.config.get_enable_dynamic())
+        self.bank_conflict_penalty = max(1, int(self.config.get_bank_conflict_penalty()))
 
         self.request_counts = kwargs.get("request_counts", None)
         self.ifmap_demand_for_alloc = kwargs.get("ifmap_demand_mat", None)
         self.filter_demand_for_alloc = kwargs.get("filter_demand_mat", None)
         self.ofmap_demand_for_alloc = kwargs.get("ofmap_demand_mat", None)
-
+         
+        # 初始化模型参数，计算当前层的tensor元素数量，构建bank分配方案，计算bank容量统计，初始化每个tensor的bank模型
         self._compute_tensor_elements()
         self._build_allocation()
         self._build_capacity_stats()
@@ -440,6 +463,7 @@ class banked_memory_system:
             "layer_id": int(self.layer_id),
             "EnableBankModel": bool(self.enable_bank_model),
             "EnableDynamic": bool(self.enable_dynamic),
+            "bank_conflict_penalty": int(self.bank_conflict_penalty),
             "total_banknum": int(self.total_banknum),
             "ifmap_banknum": ifmap_banknum,
             "filter_banknum": filter_banknum,

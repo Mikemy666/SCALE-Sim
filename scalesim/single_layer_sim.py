@@ -1,3 +1,4 @@
+
 """
 This file contains the 'single_layer_sim' class that handles the simulation for a single layer of
 the model and generates the data that goes inside the reports.

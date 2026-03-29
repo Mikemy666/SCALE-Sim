@@ -206,7 +206,7 @@ class simulator:
         if self.conf.get_enable_bank_model():
             bank_model_report_name = self.top_path + '/BANK_MODEL_REPORT.csv'
             bank_model_report = open(bank_model_report_name, 'w')
-            header = 'LayerID, EnableBankModel, EnableDynamic, bank_conflict_penalty, '
+            header = 'LayerID, EnableBankModel, EnableDynamic, EnableCapacityPenalty, bank_conflict_penalty, DRAMPenaltyScale, '
             header += 'total_banknum, ifmap_banknum, filter_banknum, ofmap_banknum, allocation_ratio, '
             header += 'bank_capacity_kb, ifmap_total_capacity_kb, filter_total_capacity_kb, ofmap_total_capacity_kb, '
             header += 'ifmap_elements, filter_elements, ofmap_elements, '
@@ -282,7 +282,9 @@ class simulator:
                 log += ', '.join([
                     str(bank_items.get('EnableBankModel', False)),
                     str(bank_items.get('EnableDynamic', False)),
+                    str(bank_items.get('EnableCapacityPenalty', True)),
                     str(bank_items.get('bank_conflict_penalty', 1)),
+                    str(bank_items.get('DRAMPenaltyScale', 8)),
                     str(bank_items.get('total_banknum', 0)),
                     str(bank_items.get('ifmap_banknum', 0)),
                     str(bank_items.get('filter_banknum', 0)),

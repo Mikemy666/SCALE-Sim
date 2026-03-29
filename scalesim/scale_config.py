@@ -46,6 +46,7 @@ class scale_config:
         self.filter_sram_bank_bandwidth = 10
         self.filter_sram_bank_num = 10
         self.filter_sram_bank_port = 2
+        self.ofmap_sram_bank_bandwidth = 10
         self.ofmap_sram_bank_num = 1
 
         self.valid_df_list = ['os', 'ws', 'is']
@@ -65,6 +66,8 @@ class scale_config:
         self.enable_bank_model = False
         self.enable_dynamic = False
         self.bank_conflict_penalty = 1
+        self.enable_capacity_penalty = True
+        self.dram_penalty_scale = 8
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -114,6 +117,10 @@ class scale_config:
             self.enable_dynamic = config.getboolean(section, 'EnableDynamic')
         if config.has_option(section, 'BankConflictPenalty'):
             self.bank_conflict_penalty = max(1, config.getint(section, 'BankConflictPenalty'))
+        if config.has_option(section, 'EnableCapacityPenalty'):
+            self.enable_capacity_penalty = config.getboolean(section, 'EnableCapacityPenalty')
+        if config.has_option(section, 'DRAMPenaltyScale'):
+            self.dram_penalty_scale = max(1, config.getint(section, 'DRAMPenaltyScale'))
 
 
         # TODO Sarbartha: Should be bw
@@ -145,6 +152,11 @@ class scale_config:
         self.filter_sram_bank_bandwidth = int(config.get(layout_section, 'FilterSRAMBankBandwidth'))
         self.filter_sram_bank_num = int(config.get(layout_section, 'FilterSRAMBankNum'))
         self.filter_sram_bank_port = int(config.get(layout_section, 'FilterSRAMBankPort'))
+        if config.has_option(layout_section, 'OfmapSRAMBankBandwidth'):
+            self.ofmap_sram_bank_bandwidth = int(config.get(layout_section, 'OfmapSRAMBankBandwidth'))
+        else:
+            # Backward-compatible default for old configs without explicit ofmap bank bandwidth.
+            self.ofmap_sram_bank_bandwidth = self.filter_sram_bank_bandwidth
         if config.has_option(layout_section, 'OfmapSRAMBankNum'):
             self.ofmap_sram_bank_num = int(config.get(layout_section, 'OfmapSRAMBankNum'))
         else:
@@ -265,6 +277,8 @@ class scale_config:
         config.set(section, 'EnableBankModel', str(self.enable_bank_model))
         config.set(section, 'EnableDynamic', str(self.enable_dynamic))
         config.set(section, 'BankConflictPenalty', str(self.bank_conflict_penalty))
+        config.set(section, 'EnableCapacityPenalty', str(self.enable_capacity_penalty))
+        config.set(section, 'DRAMPenaltyScale', str(self.dram_penalty_scale))
 
         with open(conf_file_out, 'w') as configfile:
             config.write(configfile)
@@ -483,20 +497,27 @@ class scale_config:
         if self.valid_conf_flag:
             return ','.join([str(x) for x in self.bandwidths])
 
-  #
+    #
     def get_ifmap_sram_bandwidth(self):
         """
-        Method to get the bandwidths as a value.
+        Method to get the IFMAP SRAM bank bandwidth as a value.
         """
         if self.valid_conf_flag:
             return self.ifmap_sram_bank_bandwidth
 
     def get_filter_sram_bandwidth(self):
-      """
-      Method to get the bandwidths as a value.
-      """
-      if self.valid_conf_flag:
-          return self.filter_sram_bank_bandwidth     
+        """
+        Method to get the FILTER SRAM bank bandwidth as a value.
+        """
+        if self.valid_conf_flag:
+            return self.filter_sram_bank_bandwidth
+
+    def get_ofmap_sram_bandwidth(self):
+        """
+        Method to get the OFMAP SRAM bank bandwidth as a value.
+        """
+        if self.valid_conf_flag:
+            return self.ofmap_sram_bank_bandwidth
 
     #
     def get_bandwidths_as_list(self):
@@ -560,6 +581,22 @@ class scale_config:
         if self.valid_conf_flag:
             return max(1, int(self.bank_conflict_penalty))
         return 1
+
+    def get_enable_capacity_penalty(self):
+        """
+        Method to check if SRAM overflow should incur DRAM penalty in bank model.
+        """
+        if self.valid_conf_flag:
+            return bool(self.enable_capacity_penalty)
+        return True
+
+    def get_dram_penalty_scale(self):
+        """
+        Method to get DRAM overflow penalty scale used by bank model.
+        """
+        if self.valid_conf_flag:
+            return max(1, int(self.dram_penalty_scale))
+        return 8
 
     def get_bank_allocation(self):
         """

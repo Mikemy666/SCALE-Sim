@@ -279,8 +279,8 @@ class single_layer_sim:
                 estimate_bandwidth_mode = False
                 if self.config.use_user_dram_bandwidth():
                     bws = self.config.get_bandwidths_as_list()
-                    ifmap_backing_bw = self.config.ifmap_sram_bank_bandwidth
-                    filter_backing_bw = self.config.filter_sram_bank_bandwidth
+                    ifmap_backing_bw = self.config.get_ifmap_sram_bandwidth_bytes()
+                    filter_backing_bw = self.config.get_filter_sram_bandwidth_bytes()
                     ofmap_backing_bw = bws[0]
 
                 else:

@@ -211,6 +211,8 @@ class simulator:
             header += 'bank_capacity_kb, ifmap_total_capacity_kb, filter_total_capacity_kb, ofmap_total_capacity_kb, '
             header += 'ifmap_elements, filter_elements, ofmap_elements, '
             header += 'ifmap_capacity_utilization, filter_capacity_utilization, ofmap_capacity_utilization, '
+            header += 'ifmap_overflow_to_dram, filter_overflow_to_dram, ofmap_overflow_to_dram, '
+            header += 'ifmap_dram_penalty_cycles_per_request, filter_dram_penalty_cycles_per_request, ofmap_dram_penalty_cycles_per_request, '
             header += 'ifmap_bank_conflict_delay, filter_bank_conflict_delay, ofmap_bank_conflict_delay, total_bank_conflict_delay, '
             header += 'total_cycles, stall_cycles_due_to_bank_conflict,\n'
             bank_model_report.write(header)
@@ -300,6 +302,12 @@ class simulator:
                     str(bank_items.get('ifmap_capacity_utilization', 0)),
                     str(bank_items.get('filter_capacity_utilization', 0)),
                     str(bank_items.get('ofmap_capacity_utilization', 0)),
+                    str(bank_items.get('ifmap_overflow_to_dram', False)),
+                    str(bank_items.get('filter_overflow_to_dram', False)),
+                    str(bank_items.get('ofmap_overflow_to_dram', False)),
+                    str(bank_items.get('ifmap_dram_penalty_cycles_per_request', 0)),
+                    str(bank_items.get('filter_dram_penalty_cycles_per_request', 0)),
+                    str(bank_items.get('ofmap_dram_penalty_cycles_per_request', 0)),
                     str(bank_items.get('ifmap_bank_conflict_delay', 0)),
                     str(bank_items.get('filter_bank_conflict_delay', 0)),
                     str(bank_items.get('ofmap_bank_conflict_delay', 0)),

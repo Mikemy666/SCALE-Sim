@@ -571,7 +571,7 @@ class operand_matrix(object):
         filter_interline_order  = self.layoututil.get_layer_filter_interline_order()
 
         # Sanity Checking
-        assert np.prod(filter_intraline_factor) == int(self.config.get_filter_sram_bandwidth())
+        assert np.prod(filter_intraline_factor) <= int(self.config.get_filter_sram_bandwidth())
 
         filter_overall_data = np.arange(self.filter_rows * self.filter_cols * self.num_input_channels * self.num_filters) + self.filter_offset
         

@@ -4,6 +4,7 @@ activities such as parsing the config file, writing the parameters into a config
 parameters.
 """
 import configparser as cp
+import math
 
 
 class scale_config:
@@ -48,6 +49,7 @@ class scale_config:
         self.filter_sram_bank_port = 2
         self.ofmap_sram_bank_bandwidth = 10
         self.ofmap_sram_bank_num = 1
+        self.ofmap_sram_bank_port = 2
 
         self.valid_df_list = ['os', 'ws', 'is']
 
@@ -161,6 +163,11 @@ class scale_config:
             self.ofmap_sram_bank_num = int(config.get(layout_section, 'OfmapSRAMBankNum'))
         else:
             self.ofmap_sram_bank_num = 1
+        if config.has_option(layout_section, 'OfmapSRAMBankPort'):
+            self.ofmap_sram_bank_port = int(config.get(layout_section, 'OfmapSRAMBankPort'))
+        else:
+            # Backward-compatible default for old configs without explicit ofmap bank port.
+            self.ofmap_sram_bank_port = self.filter_sram_bank_port
         
         # Anand: ISSUE #2. Patch
         if self.use_user_bandwidth:
@@ -500,24 +507,45 @@ class scale_config:
     #
     def get_ifmap_sram_bandwidth(self):
         """
-        Method to get the IFMAP SRAM bank bandwidth as a value.
+        Method to get the IFMAP SRAM bank bandwidth in bits/cycle.
         """
         if self.valid_conf_flag:
             return self.ifmap_sram_bank_bandwidth
 
+    def get_ifmap_sram_bandwidth_bytes(self):
+        """
+        Method to get the IFMAP SRAM bank bandwidth in bytes/cycle.
+        """
+        if self.valid_conf_flag:
+            return max(1, int(math.ceil(float(self.ifmap_sram_bank_bandwidth) / 8.0)))
+
     def get_filter_sram_bandwidth(self):
         """
-        Method to get the FILTER SRAM bank bandwidth as a value.
+        Method to get the FILTER SRAM bank bandwidth in bits/cycle.
         """
         if self.valid_conf_flag:
             return self.filter_sram_bank_bandwidth
 
+    def get_filter_sram_bandwidth_bytes(self):
+        """
+        Method to get the FILTER SRAM bank bandwidth in bytes/cycle.
+        """
+        if self.valid_conf_flag:
+            return max(1, int(math.ceil(float(self.filter_sram_bank_bandwidth) / 8.0)))
+
     def get_ofmap_sram_bandwidth(self):
         """
-        Method to get the OFMAP SRAM bank bandwidth as a value.
+        Method to get the OFMAP SRAM bank bandwidth in bits/cycle.
         """
         if self.valid_conf_flag:
             return self.ofmap_sram_bank_bandwidth
+
+    def get_ofmap_sram_bandwidth_bytes(self):
+        """
+        Method to get the OFMAP SRAM bank bandwidth in bytes/cycle.
+        """
+        if self.valid_conf_flag:
+            return max(1, int(math.ceil(float(self.ofmap_sram_bank_bandwidth) / 8.0)))
 
     #
     def get_bandwidths_as_list(self):

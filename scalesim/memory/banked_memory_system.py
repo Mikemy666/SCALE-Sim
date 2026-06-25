@@ -844,6 +844,32 @@ class banked_memory_system:
         self._populate_bank_report()
         self.traces_valid = True
 
+    # -------------------------------------------------------------------------
+    # Prefetch experiment helpers
+    # -------------------------------------------------------------------------
+    def simulate_with_explicit_counts(self, counts, ifmap_demand_mat, filter_demand_mat, ofmap_demand_mat, use_allocation_bases=True):
+        """Simulate demands using an explicit bank split.
+
+        This is used by the lightweight prefetch experiment to reuse the exact same
+        bank-conflict model and mapping, without mutating the state of the main
+        memory-system object.
+
+        Returns a dict with at least: total_cycles, stall_cycles.
+        """
+        assert self.params_valid_flag, "Memories not initialized yet"
+        counts = {
+            "ifmap": int(counts["ifmap"]),
+            "filter": int(counts["filter"]),
+            "ofmap": int(counts["ofmap"]),
+        }
+        return self._simulate_with_counts(
+            counts=counts,
+            ifmap_demand_mat=ifmap_demand_mat,
+            filter_demand_mat=filter_demand_mat,
+            ofmap_demand_mat=ofmap_demand_mat,
+            use_allocation_bases=bool(use_allocation_bases),
+        )
+
     def _calc_start_stop(self, trace_matrix):
         start_cycle = 0
         stop_cycle = 0

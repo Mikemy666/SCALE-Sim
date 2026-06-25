@@ -108,6 +108,26 @@ class single_layer_sim:
         # Bank-model report items
         self.bank_report_items = {}
 
+        # Cached demand matrices (used by lightweight next-layer prefetch experiment)
+        self.ifmap_demand_mat = None
+        self.filter_demand_mat = None
+        self.ofmap_demand_mat = None
+
+        # Prefetch experiment report items (populated by simulator-level model)
+        self.prefetch_report_items = {
+            'PrefetchEnabled': False,
+            'PrefetchWindow': 0,
+            'PrefetchTarget': 'ifmap,filter',
+            'PrefetchIssuedCycles': 0,
+            'PrefetchHiddenCycles': 0,
+            'PrefetchResidualStall': 0,
+            'PrefetchBankConflictCycles': 0,
+            'EffectiveMemoryLatency': 0,
+            'OriginalMemoryLatency': 0,
+            'TotalCyclesWithPrefetch': 0,
+            'TotalCyclesNoPrefetch': 0,
+        }
+
     def set_params(self,
                    layer_id=0,
                    config_obj=cfg(), topology_obj=topo(), layout_obj=layout(),
@@ -237,6 +257,11 @@ class single_layer_sim:
             filter_prefetch_mat = self.op_mat_obj.get_filter_prefetch_matrix_custom_layout()
     
         ifmap_demand_mat, filter_demand_mat, ofmap_demand_mat = self.compute_system.get_demand_matrices()
+
+        # Cache for prefetch experiment (do not modify matrices in-place elsewhere)
+        self.ifmap_demand_mat = ifmap_demand_mat
+        self.filter_demand_mat = filter_demand_mat
+        self.ofmap_demand_mat = ofmap_demand_mat
 
         request_counts = {
             'ifmap': int(np.count_nonzero(ifmap_demand_mat != -1)),
@@ -420,7 +445,51 @@ class single_layer_sim:
         if self.enable_bank_model and hasattr(self.memory_system, 'get_bank_report_dict'):
             self.bank_report_items = self.memory_system.get_bank_report_dict()
 
+        # Initialize prefetch report items to a strict "no prefetch" baseline.
+        # The simulator may overwrite these later if EnablePrefetch=True.
+        self.prefetch_report_items.update({
+            'PrefetchEnabled': False,
+            'PrefetchWindow': 0,
+            'PrefetchTarget': self.config.get_prefetch_target() if hasattr(self.config, 'get_prefetch_target') else 'ifmap,filter',
+            'PrefetchIssuedCycles': 0,
+            'PrefetchHiddenCycles': 0,
+            'PrefetchResidualStall': int(self.stall_cycles),
+            'PrefetchBankConflictCycles': 0,
+            'EffectiveMemoryLatency': int(self.stall_cycles),
+            'OriginalMemoryLatency': int(self.stall_cycles),
+            'TotalCyclesWithPrefetch': int(self.total_cycles),
+            'TotalCyclesNoPrefetch': int(self.total_cycles),
+        })
+
         self.report_items_ready = True
+
+    def set_prefetch_report_items(self, prefetch_items):
+        """Set per-layer prefetch experiment report fields.
+
+        The simulator computes these using a cycle-level abstraction model.
+        """
+        if prefetch_items is None:
+            return
+        self.prefetch_report_items = dict(prefetch_items)
+        # For legacy COMPUTE_REPORT semantics:
+        # - In bank-conflict SRAM model, we expose prefetch-adjusted total cycles via
+        #   "Total Cycles (incl. prefetch)".
+        # - In the original non-bank memory model, SCALE-Sim already has its own notion of
+        #   prefetching and overall_cycles; do NOT override it to avoid regressions.
+        if self.enable_bank_model and 'TotalCyclesWithPrefetch' in self.prefetch_report_items:
+            try:
+                self.overall_cycles = int(self.prefetch_report_items['TotalCyclesWithPrefetch'])
+            except Exception:
+                pass
+
+    def get_prefetch_report_items(self):
+        if not self.report_items_ready:
+            self.calc_report_data()
+        return dict(self.prefetch_report_items)
+
+    def get_cached_demand_matrices(self):
+        """Return cached demand matrices after run()."""
+        return self.ifmap_demand_mat, self.filter_demand_mat, self.ofmap_demand_mat
 
     #
     def get_layer_id(self):

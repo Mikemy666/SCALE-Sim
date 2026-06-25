@@ -70,6 +70,29 @@ class scale_config:
         self.bank_conflict_penalty = 1
         self.enable_capacity_penalty = True
         self.dram_penalty_scale = 8
+
+        # Prefetch experiment controls (cycle-level abstraction for prefetch-bank co-design)
+        # NOTE: This is NOT the original SCALE-Sim read-buffer prefetch model.
+        # These knobs enable a lightweight next-layer prefetch experiment on top of the
+        # bank-conflict SRAM model.
+        self.enable_prefetch = False
+        self.prefetch_window = 0
+        self.prefetch_target = 'ifmap,filter'
+        self.prefetch_policy = 'next_layer'
+        self.prefetch_priority = 'low'
+
+        # EP-MoE controls. Disabled by default to preserve legacy SCALE-Sim runs.
+        self.enable_ep_moe = False
+        self.num_gpus = 2
+        self.detailed_gpu_id = 0
+        self.experts_per_gpu = 4
+        self.top_k = 1
+        self.initial_chunk = 1
+        self.chunk_prefetch_window = 0
+        self.blackbox_workload_mode = 'analytical'
+        self.dynamic_bank_overhead = 'old_model'
+        self.communication_model = 'latency_plus_bandwidth'
+        self.enable_communication_overlap = True
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -123,6 +146,43 @@ class scale_config:
             self.enable_capacity_penalty = config.getboolean(section, 'EnableCapacityPenalty')
         if config.has_option(section, 'DRAMPenaltyScale'):
             self.dram_penalty_scale = max(1, config.getint(section, 'DRAMPenaltyScale'))
+
+        # Optional prefetch experiment knobs (next-layer prefetch)
+        if config.has_option(section, 'EnablePrefetch'):
+            self.enable_prefetch = config.getboolean(section, 'EnablePrefetch')
+        if config.has_option(section, 'PrefetchWindow'):
+            self.prefetch_window = max(0, config.getint(section, 'PrefetchWindow'))
+        if config.has_option(section, 'PrefetchTarget'):
+            self.prefetch_target = str(config.get(section, 'PrefetchTarget')).strip()
+        if config.has_option(section, 'PrefetchPolicy'):
+            self.prefetch_policy = str(config.get(section, 'PrefetchPolicy')).strip()
+        if config.has_option(section, 'PrefetchPriority'):
+            self.prefetch_priority = str(config.get(section, 'PrefetchPriority')).strip()
+
+        # Optional EP-MoE knobs. These are intentionally separate from legacy
+        # next-layer prefetch knobs because chunk prefetch has different semantics.
+        if config.has_option(section, 'EnableEPMoE'):
+            self.enable_ep_moe = config.getboolean(section, 'EnableEPMoE')
+        if config.has_option(section, 'NumGPUs'):
+            self.num_gpus = max(1, config.getint(section, 'NumGPUs'))
+        if config.has_option(section, 'DetailedGPUId'):
+            self.detailed_gpu_id = max(0, config.getint(section, 'DetailedGPUId'))
+        if config.has_option(section, 'ExpertsPerGPU'):
+            self.experts_per_gpu = max(1, config.getint(section, 'ExpertsPerGPU'))
+        if config.has_option(section, 'TopK'):
+            self.top_k = max(1, config.getint(section, 'TopK'))
+        if config.has_option(section, 'InitialChunk'):
+            self.initial_chunk = max(1, config.getint(section, 'InitialChunk'))
+        if config.has_option(section, 'ChunkPrefetchWindow'):
+            self.chunk_prefetch_window = max(0, config.getint(section, 'ChunkPrefetchWindow'))
+        if config.has_option(section, 'BlackBoxWorkloadMode'):
+            self.blackbox_workload_mode = str(config.get(section, 'BlackBoxWorkloadMode')).strip()
+        if config.has_option(section, 'DynamicBankOverhead'):
+            self.dynamic_bank_overhead = str(config.get(section, 'DynamicBankOverhead')).strip()
+        if config.has_option(section, 'CommunicationModel'):
+            self.communication_model = str(config.get(section, 'CommunicationModel')).strip()
+        if config.has_option(section, 'EnableCommunicationOverlap'):
+            self.enable_communication_overlap = config.getboolean(section, 'EnableCommunicationOverlap')
 
 
         # TODO Sarbartha: Should be bw
@@ -205,6 +265,27 @@ class scale_config:
 
         self.valid_conf_flag = True
 
+        # Lightweight validation for prefetch config
+        if self.enable_prefetch:
+            pol = str(self.prefetch_policy).lower().strip()
+            prio = str(self.prefetch_priority).lower().strip()
+            if pol not in ['next_layer']:
+                raise ValueError(f"ERROR: Unsupported PrefetchPolicy '{self.prefetch_policy}'. Only 'next_layer' is supported.")
+            if prio not in ['low']:
+                raise ValueError(f"ERROR: Unsupported PrefetchPriority '{self.prefetch_priority}'. Only 'low' is supported.")
+
+        if self.enable_ep_moe:
+            if self.detailed_gpu_id >= self.num_gpus:
+                raise ValueError("ERROR: DetailedGPUId must be smaller than NumGPUs")
+            if self.top_k not in [1, 2]:
+                raise ValueError("ERROR: TopK currently supports only 1 or 2")
+            if str(self.blackbox_workload_mode).lower().strip() not in ['analytical']:
+                raise ValueError("ERROR: BlackBoxWorkloadMode currently supports only 'analytical'")
+            if str(self.dynamic_bank_overhead).lower().strip() not in ['old_model']:
+                raise ValueError("ERROR: DynamicBankOverhead currently supports only 'old_model'")
+            if str(self.communication_model).lower().strip() not in ['latency_plus_bandwidth']:
+                raise ValueError("ERROR: CommunicationModel currently supports only 'latency_plus_bandwidth'")
+
     #
     def update_from_list(self, conf_list):
         """
@@ -286,6 +367,17 @@ class scale_config:
         config.set(section, 'BankConflictPenalty', str(self.bank_conflict_penalty))
         config.set(section, 'EnableCapacityPenalty', str(self.enable_capacity_penalty))
         config.set(section, 'DRAMPenaltyScale', str(self.dram_penalty_scale))
+        config.set(section, 'EnableEPMoE', str(self.enable_ep_moe))
+        config.set(section, 'NumGPUs', str(self.num_gpus))
+        config.set(section, 'DetailedGPUId', str(self.detailed_gpu_id))
+        config.set(section, 'ExpertsPerGPU', str(self.experts_per_gpu))
+        config.set(section, 'TopK', str(self.top_k))
+        config.set(section, 'InitialChunk', str(self.initial_chunk))
+        config.set(section, 'ChunkPrefetchWindow', str(self.chunk_prefetch_window))
+        config.set(section, 'BlackBoxWorkloadMode', str(self.blackbox_workload_mode))
+        config.set(section, 'DynamicBankOverhead', str(self.dynamic_bank_overhead))
+        config.set(section, 'CommunicationModel', str(self.communication_model))
+        config.set(section, 'EnableCommunicationOverlap', str(self.enable_communication_overlap))
 
         with open(conf_file_out, 'w') as configfile:
             config.write(configfile)
@@ -593,6 +685,107 @@ class scale_config:
         if self.valid_conf_flag:
             return self.enable_bank_model
         return False
+
+    def get_enable_prefetch(self):
+        """Enable lightweight next-layer prefetch experiment."""
+        if self.valid_conf_flag:
+            return bool(self.enable_prefetch)
+        return False
+
+    def get_prefetch_window(self):
+        """Prefetch lookahead window (0 disables prefetch effects)."""
+        if self.valid_conf_flag:
+            return max(0, int(self.prefetch_window))
+        return 0
+
+    def get_prefetch_policy(self):
+        if self.valid_conf_flag:
+            return str(self.prefetch_policy)
+        return 'next_layer'
+
+    def get_prefetch_priority(self):
+        if self.valid_conf_flag:
+            return str(self.prefetch_priority)
+        return 'low'
+
+    def get_prefetch_target(self):
+        """Raw prefetch target string (e.g., 'ifmap,filter')."""
+        if self.valid_conf_flag:
+            return str(self.prefetch_target)
+        return 'ifmap,filter'
+
+    def get_prefetch_target_list(self):
+        """Prefetch targets as a normalized list. Currently supports ifmap/filter only."""
+        raw = str(self.get_prefetch_target()).lower().strip()
+        if not raw:
+            return []
+        parts = [p.strip() for p in raw.split(',') if p.strip()]
+        allowed = {'ifmap', 'filter'}
+        out = []
+        for p in parts:
+            if p not in allowed:
+                raise ValueError(f"ERROR: Unsupported PrefetchTarget '{p}'. Only ifmap/filter are supported.")
+            if p not in out:
+                out.append(p)
+        return out
+
+    def get_enable_ep_moe(self):
+        if self.valid_conf_flag:
+            return bool(self.enable_ep_moe)
+        return False
+
+    def get_num_gpus(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.num_gpus))
+        return 1
+
+    def get_detailed_gpu_id(self):
+        if self.valid_conf_flag:
+            return max(0, int(self.detailed_gpu_id))
+        return 0
+
+    def get_experts_per_gpu(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.experts_per_gpu))
+        return 1
+
+    def get_num_experts(self):
+        return int(self.get_num_gpus() * self.get_experts_per_gpu())
+
+    def get_top_k(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.top_k))
+        return 1
+
+    def get_initial_chunk(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.initial_chunk))
+        return 1
+
+    def get_chunk_prefetch_window(self):
+        if self.valid_conf_flag:
+            return max(0, int(self.chunk_prefetch_window))
+        return 0
+
+    def get_blackbox_workload_mode(self):
+        if self.valid_conf_flag:
+            return str(self.blackbox_workload_mode)
+        return 'analytical'
+
+    def get_dynamic_bank_overhead(self):
+        if self.valid_conf_flag:
+            return str(self.dynamic_bank_overhead)
+        return 'old_model'
+
+    def get_communication_model(self):
+        if self.valid_conf_flag:
+            return str(self.communication_model)
+        return 'latency_plus_bandwidth'
+
+    def get_enable_communication_overlap(self):
+        if self.valid_conf_flag:
+            return bool(self.enable_communication_overlap)
+        return True
 
     def get_enable_dynamic(self):
         """

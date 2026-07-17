@@ -3,8 +3,8 @@
 批量实验脚本：自动修改配置文件并运行 SCALE-Sim
 """
 import subprocess
-import os
 import configparser
+from pathlib import Path
 
 # ==================== 配置区域 ====================
 # 定义实验参数组合（根据你的需求修改）
@@ -112,23 +112,25 @@ experiments = [
 ]
 
 # 文件路径配置
-CONFIG_FILE = "/home/MikeNotFound/code/SCALE-Sim/configs/scale_moe.cfg"
-TOPOLOGY_FILE = "/home/MikeNotFound/code/SCALE-Sim/topologies/MoE/topo.csv"
-OUTPUT_DIR = "/home/MikeNotFound/code/SCALE-Sim/outputs/banknum_exp"
+REPO_ROOT = Path(__file__).resolve().parent
+CONFIG_FILE = REPO_ROOT / "configs" / "MoE" / "baseline.cfg"
+TOPOLOGY_FILE = REPO_ROOT / "topologies" / "MoE" / "MoE.csv"
+OUTPUT_DIR = REPO_ROOT / "outputs" / "banknum_exp"
 WORKLOAD_TYPE = "gemm"
 
 # ==================== 函数定义 ====================
 
-def modify_config(config_file, params):
+def write_experiment_config(base_config_file, output_config_file, params):
     """
     修改配置文件中的参数
     
     Args:
-        config_file: 配置文件路径
+        base_config_file: 只读基础配置文件路径
+        output_config_file: 本次实验配置快照路径
         params: 包含要修改的参数的字典
     """
     config = configparser.ConfigParser()
-    config.read(config_file)
+    config.read(str(base_config_file))
     
     # 修改 [general] 区域的 run_name
     if 'run_name' in params:
@@ -143,9 +145,15 @@ def modify_config(config_file, params):
         config.set('layout', 'FilterSRAMBankBandwidth', str(params['FilterSRAMBankBandwidth']))
     if 'FilterSRAMBankNum' in params:
         config.set('layout', 'FilterSRAMBankNum', str(params['FilterSRAMBankNum']))
+
+    # Historical "static" runs accidentally inherited EnableDynamic=True from
+    # baseline.cfg. Keep the experiment name and allocator mode consistent.
+    run_name = str(params.get('run_name', ''))
+    enable_dynamic = run_name == 'baseline_dynamic' or run_name.startswith('dynamic')
+    config.set('run_presets', 'EnableDynamic', str(enable_dynamic))
     
-    # 写回配置文件
-    with open(config_file, 'w') as f:
+    output_config_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_config_file, 'w') as f:
         config.write(f)
     
     print(f"✓ 配置已更新: {params['run_name']}")
@@ -163,9 +171,9 @@ def run_experiment(config_file, topology_file, output_dir, workload_type):
     """
     cmd = [
         "python3", "-m", "scalesim.scale",
-        "-c", config_file,
-        "-t", topology_file,
-        "-p", output_dir,
+        "-c", str(config_file),
+        "-t", str(topology_file),
+        "-p", str(output_dir),
         "-i", workload_type
     ]
     
@@ -192,7 +200,8 @@ def main():
     print("=" * 60)
     
     # 确保输出目录存在
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    config_snapshot_dir = OUTPUT_DIR / "configs"
     
     success_count = 0
     fail_count = 0
@@ -202,11 +211,12 @@ def main():
         print(f"实验 {idx}/{len(experiments)}: {exp_params['run_name']}")
         print(f"{'=' * 60}")
         
-        # 修改配置文件
-        modify_config(CONFIG_FILE, exp_params)
+        # 生成独立配置快照，不修改仓库中的基础配置。
+        experiment_config = config_snapshot_dir / (exp_params['run_name'] + '.cfg')
+        write_experiment_config(CONFIG_FILE, experiment_config, exp_params)
         
         # 运行实验
-        if run_experiment(CONFIG_FILE, TOPOLOGY_FILE, OUTPUT_DIR, WORKLOAD_TYPE):
+        if run_experiment(experiment_config, TOPOLOGY_FILE, OUTPUT_DIR, WORKLOAD_TYPE):
             success_count += 1
         else:
             fail_count += 1

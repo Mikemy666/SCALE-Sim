@@ -113,6 +113,7 @@ class topologies(object):
                 # has been added at index 0 of entries.
                 self.append_topo_arrays(layer_name=layer_name, elems=entries)
 
+        f.close()
         self.num_layers = len(self.topo_arrays)
         self.topo_load_flag = True
 
@@ -159,6 +160,7 @@ class topologies(object):
                     layer_name = elems[0].strip()
                     self.append_topo_arrays(layer_name, elems)
 
+        f.close()
         self.num_layers = len(self.topo_arrays)
         self.topo_load_flag = True
 

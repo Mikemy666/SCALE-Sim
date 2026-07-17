@@ -6,6 +6,7 @@ test_runs
 */__pycache__
 */*/__pycache__
 */*/*/__pycache__
+__pycache__/
 topologies/*.zip
 
 .DS_Store
@@ -23,7 +24,10 @@ run_benchmark.sh
 test
 test_benchmark*
 result_parser.py
-test*
+# Historical ad-hoc test outputs. Keep the real tests/ suite trackable.
+test_runs/
+test_benchmark*
 configs_test
 benchmark_results
 results/
+outputs/

@@ -121,7 +121,12 @@ class scalesim:
             layout_obj=self.layout,
             top_path=self.top_path,
             verbosity=self.verbose_flag,
-            save_trace=save_trace
+            save_trace=save_trace,
+            input_sources={
+                'config': self.config_file,
+                'topology': self.topology_file,
+                'layout': self.layout_file,
+            },
         )
         self.run_once()
 

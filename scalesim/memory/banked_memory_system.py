@@ -559,6 +559,90 @@ class banked_memory_system:
             "breakdown": dict(breakdown),
         }
 
+    def _simulate_with_filter_prefetch_counts(
+            self,
+            counts,
+            ifmap_demand_mat,
+            filter_demand_mat,
+            ofmap_demand_mat,
+            filter_prefetch_demand_mat,
+            use_allocation_bases=False,
+            prefetch_priority="low",
+    ):
+        ifmap_model, filter_model, ofmap_model, service_cycles, elements_per_service, breakdown = self._build_models_for_counts(
+            counts=counts,
+            use_allocation_bases=use_allocation_bases,
+        )
+
+        if prefetch_priority not in ["low"]:
+            raise ValueError("Only low-priority filter prefetch is currently supported")
+
+        num_lines = int(ofmap_demand_mat.shape[0])
+        if int(filter_prefetch_demand_mat.shape[0]) != num_lines:
+            raise ValueError("filter_prefetch_demand_mat must have the same number of request lines as normal demand")
+
+        normal_stall_cycles = 0
+        prefetch_interference_stall = 0
+        prefetch_bank_conflict_cycles = 0
+        prefetch_requests = 0
+
+        ifmap_serviced_cycles = []
+        filter_serviced_cycles = []
+        filter_prefetch_serviced_cycles = []
+        ofmap_serviced_cycles = []
+
+        for req_line in range(num_lines):
+            req_cycle = int(req_line + normal_stall_cycles)
+
+            ifmap_cycle, ifmap_line_delay = ifmap_model.service_line(req_cycle, ifmap_demand_mat[req_line, :])
+            filter_cycle, filter_line_delay = filter_model.service_line(req_cycle, filter_demand_mat[req_line, :])
+            ofmap_cycle, ofmap_line_delay = ofmap_model.service_line(req_cycle, ofmap_demand_mat[req_line, :])
+
+            ifmap_serviced_cycles.append(int(ifmap_cycle))
+            filter_serviced_cycles.append(int(filter_cycle))
+            ofmap_serviced_cycles.append(int(ofmap_cycle))
+
+            normal_line_delay = int(max(ifmap_line_delay, filter_line_delay, ofmap_line_delay))
+            normal_stall_cycles += normal_line_delay
+
+            prefetch_line = filter_prefetch_demand_mat[req_line, :]
+            line_prefetch_requests = int(np.count_nonzero(prefetch_line != -1))
+            if line_prefetch_requests > 0:
+                prefetch_requests += line_prefetch_requests
+                prefetch_cycle, prefetch_line_delay = filter_model.service_line(req_cycle, prefetch_line)
+                filter_prefetch_serviced_cycles.append(int(prefetch_cycle))
+                prefetch_bank_conflict_cycles += int(prefetch_line_delay)
+                prefetch_exposed_delay = max(0, int(prefetch_line_delay) - normal_line_delay)
+                prefetch_interference_stall += int(prefetch_exposed_delay)
+            else:
+                filter_prefetch_serviced_cycles.append(int(req_cycle))
+
+        total_cycles = int(max(
+            max(ifmap_serviced_cycles) if ifmap_serviced_cycles else 0,
+            max(filter_serviced_cycles) if filter_serviced_cycles else 0,
+            max(filter_prefetch_serviced_cycles) if filter_prefetch_serviced_cycles else 0,
+            max(ofmap_serviced_cycles) if ofmap_serviced_cycles else 0,
+        ))
+
+        return {
+            "ifmap_model": ifmap_model,
+            "filter_model": filter_model,
+            "ofmap_model": ofmap_model,
+            "ifmap_serviced_cycles": ifmap_serviced_cycles,
+            "filter_serviced_cycles": filter_serviced_cycles,
+            "filter_prefetch_serviced_cycles": filter_prefetch_serviced_cycles,
+            "ofmap_serviced_cycles": ofmap_serviced_cycles,
+            "stall_cycles": int(normal_stall_cycles + prefetch_interference_stall),
+            "normal_stall_cycles": int(normal_stall_cycles),
+            "prefetch_interference_stall": int(prefetch_interference_stall),
+            "prefetch_bank_conflict_cycles": int(prefetch_bank_conflict_cycles),
+            "prefetch_requests": int(prefetch_requests),
+            "total_cycles": int(total_cycles),
+            "service_cycles": dict(service_cycles),
+            "elements_per_service": dict(elements_per_service),
+            "breakdown": dict(breakdown),
+        }
+
     def _estimate_stall_for_counts(self, counts):
         if self.ifmap_demand_for_alloc is None or self.filter_demand_for_alloc is None or self.ofmap_demand_for_alloc is None:
             return None
@@ -868,6 +952,39 @@ class banked_memory_system:
             filter_demand_mat=filter_demand_mat,
             ofmap_demand_mat=ofmap_demand_mat,
             use_allocation_bases=bool(use_allocation_bases),
+        )
+
+    def simulate_with_filter_prefetch_counts(
+            self,
+            counts,
+            ifmap_demand_mat,
+            filter_demand_mat,
+            ofmap_demand_mat,
+            filter_prefetch_demand_mat,
+            use_allocation_bases=True,
+            prefetch_priority="low",
+    ):
+        """Simulate normal IA/W/OA requests plus low-priority filter prefetch.
+
+        Prefetch requests share the filter bank model with normal filter requests.
+        For each request line, normal IA/W/OA traffic is served first; filter
+        prefetch then uses any remaining bank availability and may create exposed
+        interference for later normal lines.
+        """
+        assert self.params_valid_flag, "Memories not initialized yet"
+        counts = {
+            "ifmap": int(counts["ifmap"]),
+            "filter": int(counts["filter"]),
+            "ofmap": int(counts["ofmap"]),
+        }
+        return self._simulate_with_filter_prefetch_counts(
+            counts=counts,
+            ifmap_demand_mat=ifmap_demand_mat,
+            filter_demand_mat=filter_demand_mat,
+            ofmap_demand_mat=ofmap_demand_mat,
+            filter_prefetch_demand_mat=filter_prefetch_demand_mat,
+            use_allocation_bases=bool(use_allocation_bases),
+            prefetch_priority=str(prefetch_priority).lower().strip(),
         )
 
     def _calc_start_stop(self, trace_matrix):

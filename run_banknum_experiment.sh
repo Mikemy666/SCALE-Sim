@@ -4,10 +4,11 @@
 
 set -euo pipefail
 
-# ==================== 固定路径配置 ====================
-CFG_DIR="/home/MikeNotFound/code/SCALE-Sim/configs/MoE/end2end/port"
-TOPOLOGY_FILE="/home/MikeNotFound/code/SCALE-Sim/topologies/MoE/MoE.csv"
-OUTPUT_DIR="/home/MikeNotFound/code/SCALE-Sim/outputs/final4/end2end/port"
+# ==================== 默认路径配置 ====================
+REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CFG_DIR="${CFG_DIR:-$REPO_ROOT/configs/MoE}"
+TOPOLOGY_FILE="${TOPOLOGY_FILE:-$REPO_ROOT/topologies/MoE/MoE.csv}"
+OUTPUT_DIR="${OUTPUT_DIR:-$REPO_ROOT/outputs/banknum_batch}"
 WORKLOAD_TYPE="gemm"
 LOG_DIR="$OUTPUT_DIR/logs"
 
@@ -46,9 +47,6 @@ for cfg in "$CFG_DIR"/*; do
   echo "  -p $OUTPUT_DIR \\"
   echo "  -i $WORKLOAD_TYPE"
   echo
-
-  # 若输出目录已存在，先清理（防止旧结果污染）
-  rm -rf "$OUTPUT_DIR/$run_name"
 
   # 执行并记录日志
   if python3 -m scalesim.scale \

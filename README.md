@@ -115,6 +115,38 @@ In addition cycle accurate SRAM/DRAM access logs are also dumped and could be ac
 
 ## Advanced Features
 
+### *Expert-Parallel MoE experiments*
+
+This branch supports detailed/analytical multi-GPU Expert Parallelism, routed
+Top-K experts, parallel expert scheduling, chunk-level weight prefetch, static
+or dynamic bank allocation, and latency-plus-bandwidth communication.
+
+Run the default two-GPU workload:
+
+```sh
+python -m scalesim.scale \
+  -c configs/MoE/ep_default.cfg \
+  -t topologies/MoE/test.csv \
+  -l layouts/conv_nets/test.csv \
+  -p outputs/ep_default -i gemm -s N
+```
+
+Run the canonical static/dynamic × prefetch matrix and sanity checks:
+
+```sh
+python run_ep_moe_experiments.py --output outputs/ep_moe_matrix
+python run_ep_moe_sanity.py --output outputs/ep_moe_sanity
+python validate_ep_moe_reports.py outputs/ep_moe_matrix/ep_dynamic_prefetch
+```
+
+EP output files include routing, runtime state, event timeline, chunk metadata,
+bank allocation, expert/group summaries, and an input SHA-256 manifest. See
+`documentation/P1_CONFIG.md` through `documentation/P11_REPRODUCIBILITY.md` for
+the incremental design and validation record.
+
+完整的中文配置、运行与结果说明见
+[`README_EP_MOE_CN.md`](README_EP_MOE_CN.md)。
+
 ### *Using Multi-core feature*
 
 SCALE-Sim v3 introduces **multi-core simulation capabilities** to address the limitations of its predecessor, SCALE-Sim v2, which could only model single-core systolic arrays. This feature allows comprehensive modeling of modern AI accelerators equipped with multiple tensor cores, enabling researchers to simulate advanced workloads and optimize performance. For detailed setup and usage instructions, refer to the ```multi-core/README.md``` file.
@@ -257,5 +289,3 @@ v2 Contributers/Collaborators
 * Paul Whatmough
 * Vineet Nadella
 * Sachit Kuhar
-
-

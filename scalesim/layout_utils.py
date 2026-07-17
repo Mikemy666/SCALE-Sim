@@ -64,6 +64,7 @@ class layouts(object):
                     layer_name = elems[0].strip()
                     self.append_layout_arrays(layer_name, elems)
 
+        f.close()
         self.num_layers = len(self.layout_arrays)
         self.layout_load_flag = True
 

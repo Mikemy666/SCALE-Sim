@@ -5,6 +5,7 @@ parameters.
 """
 import configparser as cp
 import math
+from pathlib import Path
 
 
 class scale_config:
@@ -17,6 +18,7 @@ class scale_config:
         __init__ method
         """
         self.run_name = "scale_run"
+        self.config_dir = Path('.')
         # Anand: ISSUE #2. Patch
         self.use_user_bandwidth = False
 
@@ -83,16 +85,34 @@ class scale_config:
 
         # EP-MoE controls. Disabled by default to preserve legacy SCALE-Sim runs.
         self.enable_ep_moe = False
+        self.enable_parallel_moe = True
         self.num_gpus = 2
         self.detailed_gpu_id = 0
+        self.blackbox_gpu_ids = ''
         self.experts_per_gpu = 4
+        self.compute_engines_per_gpu = 4
         self.top_k = 1
+        self.moe_routing_mode = 'topology_counts'
+        self.moe_tokens = 0
+        self.routing_file = ''
+        self.routing_seed = 40
+        self.routing_skew_factor = 1.0
+        self.moe_active_expert_mode = 'all'
+        self.active_expert_ids = ''
+        self.enable_chunk_prefetch = False
         self.initial_chunk = 1
         self.chunk_prefetch_window = 0
         self.blackbox_workload_mode = 'analytical'
+        self.blackbox_bandwidth_bytes_per_cycle = 128
+        self.enable_blackbox_background_pressure = False
+        self.global_memory_bandwidth_bytes_per_cycle = 1024
         self.dynamic_bank_overhead = 'old_model'
         self.communication_model = 'latency_plus_bandwidth'
-        self.enable_communication_overlap = True
+        self.precision_bytes = 2
+        self.communication_latency_cycles = 0
+        self.communication_bandwidth_bytes_per_cycle = 128
+        self.communication_overlap_mode = 'prefetch_only'
+        self.allow_comm_prefetch_overlap = True
         
         # Time linear model parameter
         self.time_linear_model = 'None'
@@ -106,6 +126,7 @@ class scale_config:
 
         config = cp.ConfigParser()
         config.read(conf_file_in)
+        self.config_dir = Path(conf_file_in).resolve().parent
 
         section = 'general'
         self.run_name = config.get(section, 'run_name')
@@ -163,26 +184,65 @@ class scale_config:
         # next-layer prefetch knobs because chunk prefetch has different semantics.
         if config.has_option(section, 'EnableEPMoE'):
             self.enable_ep_moe = config.getboolean(section, 'EnableEPMoE')
+        if config.has_option(section, 'EnableParallelMoE'):
+            self.enable_parallel_moe = config.getboolean(section, 'EnableParallelMoE')
         if config.has_option(section, 'NumGPUs'):
-            self.num_gpus = max(1, config.getint(section, 'NumGPUs'))
+            self.num_gpus = config.getint(section, 'NumGPUs')
         if config.has_option(section, 'DetailedGPUId'):
-            self.detailed_gpu_id = max(0, config.getint(section, 'DetailedGPUId'))
+            self.detailed_gpu_id = config.getint(section, 'DetailedGPUId')
+        if config.has_option(section, 'BlackBoxGPUIds'):
+            self.blackbox_gpu_ids = str(config.get(section, 'BlackBoxGPUIds')).strip()
         if config.has_option(section, 'ExpertsPerGPU'):
-            self.experts_per_gpu = max(1, config.getint(section, 'ExpertsPerGPU'))
+            self.experts_per_gpu = config.getint(section, 'ExpertsPerGPU')
+        if config.has_option(section, 'ComputeEnginesPerGPU'):
+            self.compute_engines_per_gpu = config.getint(section, 'ComputeEnginesPerGPU')
         if config.has_option(section, 'TopK'):
-            self.top_k = max(1, config.getint(section, 'TopK'))
+            self.top_k = config.getint(section, 'TopK')
+        if config.has_option(section, 'MoERoutingMode'):
+            self.moe_routing_mode = str(config.get(section, 'MoERoutingMode')).strip()
+        if config.has_option(section, 'MoETokens'):
+            self.moe_tokens = config.getint(section, 'MoETokens')
+        if config.has_option(section, 'RoutingFile'):
+            self.routing_file = str(config.get(section, 'RoutingFile')).strip()
+        if config.has_option(section, 'RoutingSeed'):
+            self.routing_seed = config.getint(section, 'RoutingSeed')
+        if config.has_option(section, 'RoutingSkewFactor'):
+            self.routing_skew_factor = config.getfloat(section, 'RoutingSkewFactor')
+        if config.has_option(section, 'MoEActiveExpertMode'):
+            self.moe_active_expert_mode = str(config.get(section, 'MoEActiveExpertMode')).strip()
+        if config.has_option(section, 'ActiveExpertIds'):
+            self.active_expert_ids = str(config.get(section, 'ActiveExpertIds')).strip()
+        if config.has_option(section, 'EnableChunkPrefetch'):
+            self.enable_chunk_prefetch = config.getboolean(section, 'EnableChunkPrefetch')
         if config.has_option(section, 'InitialChunk'):
-            self.initial_chunk = max(1, config.getint(section, 'InitialChunk'))
+            self.initial_chunk = config.getint(section, 'InitialChunk')
         if config.has_option(section, 'ChunkPrefetchWindow'):
-            self.chunk_prefetch_window = max(0, config.getint(section, 'ChunkPrefetchWindow'))
+            self.chunk_prefetch_window = config.getint(section, 'ChunkPrefetchWindow')
         if config.has_option(section, 'BlackBoxWorkloadMode'):
             self.blackbox_workload_mode = str(config.get(section, 'BlackBoxWorkloadMode')).strip()
+        if config.has_option(section, 'BlackBoxBandwidthBytesPerCycle'):
+            self.blackbox_bandwidth_bytes_per_cycle = config.getint(section, 'BlackBoxBandwidthBytesPerCycle')
+        if config.has_option(section, 'EnableBlackBoxBackgroundPressure'):
+            self.enable_blackbox_background_pressure = config.getboolean(section, 'EnableBlackBoxBackgroundPressure')
+        if config.has_option(section, 'GlobalMemoryBandwidthBytesPerCycle'):
+            self.global_memory_bandwidth_bytes_per_cycle = config.getint(section, 'GlobalMemoryBandwidthBytesPerCycle')
         if config.has_option(section, 'DynamicBankOverhead'):
             self.dynamic_bank_overhead = str(config.get(section, 'DynamicBankOverhead')).strip()
         if config.has_option(section, 'CommunicationModel'):
             self.communication_model = str(config.get(section, 'CommunicationModel')).strip()
-        if config.has_option(section, 'EnableCommunicationOverlap'):
-            self.enable_communication_overlap = config.getboolean(section, 'EnableCommunicationOverlap')
+        if config.has_option(section, 'PrecisionBytes'):
+            self.precision_bytes = config.getint(section, 'PrecisionBytes')
+        if config.has_option(section, 'CommunicationLatencyCycles'):
+            self.communication_latency_cycles = config.getint(section, 'CommunicationLatencyCycles')
+        if config.has_option(section, 'CommunicationBandwidthBytesPerCycle'):
+            self.communication_bandwidth_bytes_per_cycle = config.getint(section, 'CommunicationBandwidthBytesPerCycle')
+        if config.has_option(section, 'CommunicationOverlapMode'):
+            self.communication_overlap_mode = str(config.get(section, 'CommunicationOverlapMode')).strip()
+        if config.has_option(section, 'AllowCommPrefetchOverlap'):
+            self.allow_comm_prefetch_overlap = config.getboolean(section, 'AllowCommPrefetchOverlap')
+        elif config.has_option(section, 'EnableCommunicationOverlap'):
+            # Backward-compatible alias used by the initial EP scaffold.
+            self.allow_comm_prefetch_overlap = config.getboolean(section, 'EnableCommunicationOverlap')
 
 
         # TODO Sarbartha: Should be bw
@@ -206,28 +266,45 @@ class scale_config:
             self.req_buf_sz_wr = int(config.get(section, 'WriteRequestBuffer')) // div_factor
 
         layout_section = 'layout'
-        self.using_ifmap_custom_layout = config.getboolean(layout_section, 'IfmapCustomLayout')
-        self.using_filter_custom_layout = config.getboolean(layout_section, 'FilterCustomLayout')
-        self.ifmap_sram_bank_bandwidth = int(config.get(layout_section, 'IfmapSRAMBankBandwidth'))
-        self.ifmap_sram_bank_num = int(config.get(layout_section, 'IfmapSRAMBankNum'))
-        self.ifmap_sram_bank_port = int(config.get(layout_section, 'IfmapSRAMBankPort'))
-        self.filter_sram_bank_bandwidth = int(config.get(layout_section, 'FilterSRAMBankBandwidth'))
-        self.filter_sram_bank_num = int(config.get(layout_section, 'FilterSRAMBankNum'))
-        self.filter_sram_bank_port = int(config.get(layout_section, 'FilterSRAMBankPort'))
-        if config.has_option(layout_section, 'OfmapSRAMBankBandwidth'):
-            self.ofmap_sram_bank_bandwidth = int(config.get(layout_section, 'OfmapSRAMBankBandwidth'))
+        if config.has_section(layout_section):
+            self.using_ifmap_custom_layout = config.getboolean(layout_section, 'IfmapCustomLayout')
+            self.using_filter_custom_layout = config.getboolean(layout_section, 'FilterCustomLayout')
+            self.ifmap_sram_bank_bandwidth = int(config.get(layout_section, 'IfmapSRAMBankBandwidth'))
+            self.ifmap_sram_bank_num = int(config.get(layout_section, 'IfmapSRAMBankNum'))
+            self.ifmap_sram_bank_port = int(config.get(layout_section, 'IfmapSRAMBankPort'))
+            self.filter_sram_bank_bandwidth = int(config.get(layout_section, 'FilterSRAMBankBandwidth'))
+            self.filter_sram_bank_num = int(config.get(layout_section, 'FilterSRAMBankNum'))
+            self.filter_sram_bank_port = int(config.get(layout_section, 'FilterSRAMBankPort'))
+            if config.has_option(layout_section, 'OfmapSRAMBankBandwidth'):
+                self.ofmap_sram_bank_bandwidth = int(config.get(layout_section, 'OfmapSRAMBankBandwidth'))
+            else:
+                self.ofmap_sram_bank_bandwidth = self.filter_sram_bank_bandwidth
+            if config.has_option(layout_section, 'OfmapSRAMBankNum'):
+                self.ofmap_sram_bank_num = int(config.get(layout_section, 'OfmapSRAMBankNum'))
+            else:
+                self.ofmap_sram_bank_num = 1
+            if config.has_option(layout_section, 'OfmapSRAMBankPort'):
+                self.ofmap_sram_bank_port = int(config.get(layout_section, 'OfmapSRAMBankPort'))
+            else:
+                self.ofmap_sram_bank_port = self.filter_sram_bank_port
         else:
-            # Backward-compatible default for old configs without explicit ofmap bank bandwidth.
-            self.ofmap_sram_bank_bandwidth = self.filter_sram_bank_bandwidth
-        if config.has_option(layout_section, 'OfmapSRAMBankNum'):
-            self.ofmap_sram_bank_num = int(config.get(layout_section, 'OfmapSRAMBankNum'))
-        else:
-            self.ofmap_sram_bank_num = 1
-        if config.has_option(layout_section, 'OfmapSRAMBankPort'):
-            self.ofmap_sram_bank_port = int(config.get(layout_section, 'OfmapSRAMBankPort'))
-        else:
-            # Backward-compatible default for old configs without explicit ofmap bank port.
-            self.ofmap_sram_bank_port = self.filter_sram_bank_port
+            # Original SCALE-Sim configs predate the layout section. Preserve
+            # their aggregate bank defaults while providing a complete internal
+            # representation for config validation and round-tripping.
+            legacy_bank_num = config.getint(section, 'OnChipMemoryBanks', fallback=1)
+            legacy_bank_port = config.getint(section, 'OnChipMemoryBankPorts', fallback=2)
+            legacy_bank_bw = config.getint(section, 'Bandwidth', fallback=10)
+            self.using_ifmap_custom_layout = False
+            self.using_filter_custom_layout = False
+            self.ifmap_sram_bank_bandwidth = legacy_bank_bw
+            self.filter_sram_bank_bandwidth = legacy_bank_bw
+            self.ofmap_sram_bank_bandwidth = legacy_bank_bw
+            self.ifmap_sram_bank_num = legacy_bank_num
+            self.filter_sram_bank_num = legacy_bank_num
+            self.ofmap_sram_bank_num = legacy_bank_num
+            self.ifmap_sram_bank_port = legacy_bank_port
+            self.filter_sram_bank_port = legacy_bank_port
+            self.ofmap_sram_bank_port = legacy_bank_port
         
         # Anand: ISSUE #2. Patch
         if self.use_user_bandwidth:
@@ -238,7 +315,7 @@ class scale_config:
             print("WARNING: Invalid dataflow")
 
         if config.has_section('network_presets'):  # Read network_presets
-            self.topofile = config.get(section, 'TopologyCsvLoc').split('"')[1]
+            self.topofile = config.get('network_presets', 'TopologyCsvLoc').strip().strip('"')
 
         # Sparsity - make this section optional
         if config.has_section('sparsity'):
@@ -265,6 +342,28 @@ class scale_config:
 
         self.valid_conf_flag = True
 
+        positive_common_values = {
+            'ArrayHeight': self.array_rows,
+            'ArrayWidth': self.array_cols,
+            'IfmapSRAMSzkB': self.ifmap_sz_kb,
+            'FilterSRAMSzkB': self.filter_sz_kb,
+            'OfmapSRAMSzkB': self.ofmap_sz_kb,
+            'IfmapSRAMBankBandwidth': self.ifmap_sram_bank_bandwidth,
+            'IfmapSRAMBankNum': self.ifmap_sram_bank_num,
+            'IfmapSRAMBankPort': self.ifmap_sram_bank_port,
+            'FilterSRAMBankBandwidth': self.filter_sram_bank_bandwidth,
+            'FilterSRAMBankNum': self.filter_sram_bank_num,
+            'FilterSRAMBankPort': self.filter_sram_bank_port,
+            'OfmapSRAMBankBandwidth': self.ofmap_sram_bank_bandwidth,
+            'OfmapSRAMBankNum': self.ofmap_sram_bank_num,
+            'OfmapSRAMBankPort': self.ofmap_sram_bank_port,
+        }
+        invalid_common = [name for name, value in positive_common_values.items() if int(value) <= 0]
+        if invalid_common:
+            raise ValueError('ERROR: Configuration values must be positive: ' + ', '.join(invalid_common))
+        if self.use_user_bandwidth and (not self.bandwidths or any(int(bw) <= 0 for bw in self.bandwidths)):
+            raise ValueError('ERROR: USER InterfaceBandwidth requires positive Bandwidth values')
+
         # Lightweight validation for prefetch config
         if self.enable_prefetch:
             pol = str(self.prefetch_policy).lower().strip()
@@ -275,16 +374,86 @@ class scale_config:
                 raise ValueError(f"ERROR: Unsupported PrefetchPriority '{self.prefetch_priority}'. Only 'low' is supported.")
 
         if self.enable_ep_moe:
+            if self.num_gpus <= 0:
+                raise ValueError("ERROR: NumGPUs must be positive")
+            if self.detailed_gpu_id < 0:
+                raise ValueError("ERROR: DetailedGPUId must be non-negative")
             if self.detailed_gpu_id >= self.num_gpus:
                 raise ValueError("ERROR: DetailedGPUId must be smaller than NumGPUs")
+            if self.experts_per_gpu <= 0:
+                raise ValueError("ERROR: ExpertsPerGPU must be positive")
+            if self.compute_engines_per_gpu <= 0:
+                raise ValueError("ERROR: ComputeEnginesPerGPU must be positive")
+            if self.initial_chunk <= 0:
+                raise ValueError("ERROR: InitialChunk must be positive")
+            if self.chunk_prefetch_window < 0:
+                raise ValueError("ERROR: ChunkPrefetchWindow must be non-negative")
+            if self.precision_bytes <= 0:
+                raise ValueError("ERROR: PrecisionBytes must be positive")
+            if self.blackbox_bandwidth_bytes_per_cycle <= 0:
+                raise ValueError("ERROR: BlackBoxBandwidthBytesPerCycle must be positive")
+            if self.global_memory_bandwidth_bytes_per_cycle <= 0:
+                raise ValueError("ERROR: GlobalMemoryBandwidthBytesPerCycle must be positive")
+            if self.communication_latency_cycles < 0:
+                raise ValueError("ERROR: CommunicationLatencyCycles must be non-negative")
+            if self.communication_bandwidth_bytes_per_cycle <= 0:
+                raise ValueError("ERROR: CommunicationBandwidthBytesPerCycle must be positive")
             if self.top_k not in [1, 2]:
                 raise ValueError("ERROR: TopK currently supports only 1 or 2")
+            if self.top_k > self.get_num_experts():
+                raise ValueError("ERROR: TopK cannot exceed NumExperts")
+            routing_mode = self.get_moe_routing_mode()
+            if routing_mode not in ['topology_counts', 'balanced', 'explicit', 'seeded_skewed']:
+                raise ValueError(
+                    "ERROR: MoERoutingMode supports topology_counts, balanced, explicit, or seeded_skewed"
+                )
+            if routing_mode in ['balanced', 'seeded_skewed'] and self.moe_tokens <= 0:
+                raise ValueError(f"ERROR: MoETokens must be positive for MoERoutingMode={routing_mode}")
+            if routing_mode == 'explicit' and not self.routing_file:
+                raise ValueError("ERROR: RoutingFile is required for MoERoutingMode=explicit")
+            if self.moe_tokens < 0:
+                raise ValueError("ERROR: MoETokens must be non-negative")
+            if self.routing_skew_factor <= 0:
+                raise ValueError("ERROR: RoutingSkewFactor must be positive")
+            blackbox_gpu_ids = self.get_blackbox_gpu_ids()
+            expected_blackbox_ids = [gpu_id for gpu_id in range(self.num_gpus) if gpu_id != self.detailed_gpu_id]
+            if len(blackbox_gpu_ids) != len(set(blackbox_gpu_ids)):
+                raise ValueError("ERROR: BlackBoxGPUIds must not contain duplicates")
+            if sorted(blackbox_gpu_ids) != expected_blackbox_ids:
+                raise ValueError(
+                    "ERROR: BlackBoxGPUIds must contain every non-detailed GPU exactly once; "
+                    f"expected {expected_blackbox_ids}, got {blackbox_gpu_ids}"
+                )
+            active_expert_ids = self.get_active_expert_ids()
+            if len(active_expert_ids) != len(set(active_expert_ids)):
+                raise ValueError("ERROR: ActiveExpertIds must not contain duplicates")
+            invalid_expert_ids = [eid for eid in active_expert_ids if eid < 0 or eid >= self.get_num_experts()]
+            if invalid_expert_ids:
+                raise ValueError(
+                    f"ERROR: ActiveExpertIds out of range [0, {self.get_num_experts() - 1}]: {invalid_expert_ids}"
+                )
+            if str(self.moe_active_expert_mode).lower().strip() != 'all':
+                raise ValueError(
+                    "ERROR: MoEActiveExpertMode=topk_prefix is removed; active experts are derived from routing"
+                )
+            if active_expert_ids:
+                raise ValueError(
+                    "ERROR: ActiveExpertIds is replaced by MoERoutingMode/RoutingFile in EP-MoE mode"
+                )
             if str(self.blackbox_workload_mode).lower().strip() not in ['analytical']:
                 raise ValueError("ERROR: BlackBoxWorkloadMode currently supports only 'analytical'")
             if str(self.dynamic_bank_overhead).lower().strip() not in ['old_model']:
                 raise ValueError("ERROR: DynamicBankOverhead currently supports only 'old_model'")
             if str(self.communication_model).lower().strip() not in ['latency_plus_bandwidth']:
                 raise ValueError("ERROR: CommunicationModel currently supports only 'latency_plus_bandwidth'")
+            if str(self.communication_overlap_mode).lower().strip() not in ['none', 'prefetch_only', 'full']:
+                raise ValueError("ERROR: CommunicationOverlapMode supports only 'none', 'prefetch_only', or 'full'")
+            if self.enable_prefetch and self.enable_chunk_prefetch:
+                raise ValueError(
+                    "ERROR: legacy EnablePrefetch and EP EnableChunkPrefetch cannot be enabled together"
+                )
+            if self.enable_chunk_prefetch and self.chunk_prefetch_window <= 0:
+                raise ValueError("ERROR: EnableChunkPrefetch=True requires ChunkPrefetchWindow > 0")
 
     #
     def update_from_list(self, conf_list):
@@ -350,6 +519,30 @@ class scale_config:
 
         config.set(section, 'Dataflow', str(self.df))
         config.set(section, 'Bandwidth', ','.join([str(x) for x in self.bandwidths]))
+        config.set(section, 'ReadRequestBuffer', str(self.req_buf_sz_rd))
+        config.set(section, 'WriteRequestBuffer', str(self.req_buf_sz_wr))
+
+        section = 'layout'
+        config.add_section(section)
+        config.set(section, 'IfmapCustomLayout', str(self.using_ifmap_custom_layout))
+        config.set(section, 'IfmapSRAMBankBandwidth', str(self.ifmap_sram_bank_bandwidth))
+        config.set(section, 'IfmapSRAMBankNum', str(self.ifmap_sram_bank_num))
+        config.set(section, 'IfmapSRAMBankPort', str(self.ifmap_sram_bank_port))
+        config.set(section, 'FilterCustomLayout', str(self.using_filter_custom_layout))
+        config.set(section, 'FilterSRAMBankBandwidth', str(self.filter_sram_bank_bandwidth))
+        config.set(section, 'FilterSRAMBankNum', str(self.filter_sram_bank_num))
+        config.set(section, 'FilterSRAMBankPort', str(self.filter_sram_bank_port))
+        config.set(section, 'OfmapSRAMBankBandwidth', str(self.ofmap_sram_bank_bandwidth))
+        config.set(section, 'OfmapSRAMBankNum', str(self.ofmap_sram_bank_num))
+        config.set(section, 'OfmapSRAMBankPort', str(self.ofmap_sram_bank_port))
+
+        section = 'sparsity'
+        config.add_section(section)
+        config.set(section, 'SparsitySupport', str(self.sparsity_support))
+        config.set(section, 'SparseRep', str(self.sparsity_representation or 'ellpack_block'))
+        config.set(section, 'OptimizedMapping', str(self.sparsity_optimized_mapping))
+        config.set(section, 'BlockSize', str(self.sparsity_block_size))
+        config.set(section, 'RandomNumberGeneratorSeed', str(self.sparsity_rand_seed))
 
         section = 'network_presets'
         config.add_section(section)
@@ -368,16 +561,34 @@ class scale_config:
         config.set(section, 'EnableCapacityPenalty', str(self.enable_capacity_penalty))
         config.set(section, 'DRAMPenaltyScale', str(self.dram_penalty_scale))
         config.set(section, 'EnableEPMoE', str(self.enable_ep_moe))
+        config.set(section, 'EnableParallelMoE', str(self.enable_parallel_moe))
         config.set(section, 'NumGPUs', str(self.num_gpus))
         config.set(section, 'DetailedGPUId', str(self.detailed_gpu_id))
+        config.set(section, 'BlackBoxGPUIds', ','.join(str(x) for x in self.get_blackbox_gpu_ids()))
         config.set(section, 'ExpertsPerGPU', str(self.experts_per_gpu))
+        config.set(section, 'ComputeEnginesPerGPU', str(self.compute_engines_per_gpu))
         config.set(section, 'TopK', str(self.top_k))
+        config.set(section, 'MoERoutingMode', str(self.moe_routing_mode))
+        config.set(section, 'MoETokens', str(self.moe_tokens))
+        config.set(section, 'RoutingFile', str(self.get_routing_file()))
+        config.set(section, 'RoutingSeed', str(self.routing_seed))
+        config.set(section, 'RoutingSkewFactor', str(self.routing_skew_factor))
+        config.set(section, 'MoEActiveExpertMode', str(self.moe_active_expert_mode))
+        config.set(section, 'ActiveExpertIds', str(self.active_expert_ids))
+        config.set(section, 'EnableChunkPrefetch', str(self.enable_chunk_prefetch))
         config.set(section, 'InitialChunk', str(self.initial_chunk))
         config.set(section, 'ChunkPrefetchWindow', str(self.chunk_prefetch_window))
         config.set(section, 'BlackBoxWorkloadMode', str(self.blackbox_workload_mode))
+        config.set(section, 'BlackBoxBandwidthBytesPerCycle', str(self.blackbox_bandwidth_bytes_per_cycle))
+        config.set(section, 'EnableBlackBoxBackgroundPressure', str(self.enable_blackbox_background_pressure))
+        config.set(section, 'GlobalMemoryBandwidthBytesPerCycle', str(self.global_memory_bandwidth_bytes_per_cycle))
         config.set(section, 'DynamicBankOverhead', str(self.dynamic_bank_overhead))
         config.set(section, 'CommunicationModel', str(self.communication_model))
-        config.set(section, 'EnableCommunicationOverlap', str(self.enable_communication_overlap))
+        config.set(section, 'PrecisionBytes', str(self.precision_bytes))
+        config.set(section, 'CommunicationLatencyCycles', str(self.communication_latency_cycles))
+        config.set(section, 'CommunicationBandwidthBytesPerCycle', str(self.communication_bandwidth_bytes_per_cycle))
+        config.set(section, 'CommunicationOverlapMode', str(self.communication_overlap_mode))
+        config.set(section, 'AllowCommPrefetchOverlap', str(self.allow_comm_prefetch_overlap))
 
         with open(conf_file_out, 'w') as configfile:
             config.write(configfile)
@@ -646,10 +857,6 @@ class scale_config:
         """
         if self.valid_conf_flag:
             return self.bandwidths
-
-    def get_bandwidths_as_list(self):
-        if self.valid_conf_flag:
-            return self.bandwidths
         
     def get_num_bank(self):
         if self.valid_conf_flag:
@@ -734,6 +941,11 @@ class scale_config:
             return bool(self.enable_ep_moe)
         return False
 
+    def get_enable_parallel_moe(self):
+        if self.valid_conf_flag:
+            return bool(self.enable_parallel_moe)
+        return True
+
     def get_num_gpus(self):
         if self.valid_conf_flag:
             return max(1, int(self.num_gpus))
@@ -744,9 +956,29 @@ class scale_config:
             return max(0, int(self.detailed_gpu_id))
         return 0
 
+    def get_blackbox_gpu_ids(self):
+        if not self.valid_conf_flag:
+            return []
+        raw = str(self.blackbox_gpu_ids).strip()
+        if raw == '' or raw.lower() == 'auto':
+            return [gpu_id for gpu_id in range(self.get_num_gpus()) if gpu_id != self.get_detailed_gpu_id()]
+        if raw.startswith('[') and raw.endswith(']'):
+            raw = raw[1:-1].strip()
+        gpu_ids = []
+        for item in raw.split(','):
+            item = item.strip()
+            if item:
+                gpu_ids.append(int(item))
+        return gpu_ids
+
     def get_experts_per_gpu(self):
         if self.valid_conf_flag:
             return max(1, int(self.experts_per_gpu))
+        return 1
+
+    def get_compute_engines_per_gpu(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.compute_engines_per_gpu))
         return 1
 
     def get_num_experts(self):
@@ -757,13 +989,67 @@ class scale_config:
             return max(1, int(self.top_k))
         return 1
 
+    def get_moe_routing_mode(self):
+        if self.valid_conf_flag:
+            return str(self.moe_routing_mode).lower().strip()
+        return 'topology_counts'
+
+    def get_moe_tokens(self):
+        if self.valid_conf_flag:
+            return max(0, int(self.moe_tokens))
+        return 0
+
+    def get_routing_file(self):
+        if not self.valid_conf_flag or not str(self.routing_file).strip():
+            return ''
+        path = Path(str(self.routing_file).strip()).expanduser()
+        if not path.is_absolute():
+            path = self.config_dir / path
+        return str(path.resolve())
+
+    def get_routing_seed(self):
+        if self.valid_conf_flag:
+            return int(self.routing_seed)
+        return 40
+
+    def get_routing_skew_factor(self):
+        if self.valid_conf_flag:
+            return float(self.routing_skew_factor)
+        return 1.0
+
+    def get_moe_active_expert_mode(self):
+        if self.valid_conf_flag:
+            return str(self.moe_active_expert_mode).lower().strip()
+        return 'all'
+
+    def get_active_expert_ids(self):
+        if not self.valid_conf_flag:
+            return []
+        raw = str(self.active_expert_ids).strip()
+        if raw == '' or raw.lower() == 'all':
+            return []
+        if raw.startswith('[') and raw.endswith(']'):
+            raw = raw[1:-1].strip()
+        expert_ids = []
+        for item in raw.split(','):
+            item = item.strip()
+            if item == '':
+                continue
+            expert_ids.append(int(item))
+        return expert_ids
+
     def get_initial_chunk(self):
         if self.valid_conf_flag:
             return max(1, int(self.initial_chunk))
         return 1
 
-    def get_chunk_prefetch_window(self):
+    def get_enable_chunk_prefetch(self):
         if self.valid_conf_flag:
+            return bool(self.enable_chunk_prefetch)
+        return False
+
+    def get_chunk_prefetch_window(self):
+        if self.valid_conf_flag and self.get_enable_chunk_prefetch():
             return max(0, int(self.chunk_prefetch_window))
         return 0
 
@@ -771,6 +1057,21 @@ class scale_config:
         if self.valid_conf_flag:
             return str(self.blackbox_workload_mode)
         return 'analytical'
+
+    def get_blackbox_bandwidth_bytes_per_cycle(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.blackbox_bandwidth_bytes_per_cycle))
+        return 128
+
+    def get_enable_blackbox_background_pressure(self):
+        if self.valid_conf_flag:
+            return bool(self.enable_blackbox_background_pressure)
+        return False
+
+    def get_global_memory_bandwidth_bytes_per_cycle(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.global_memory_bandwidth_bytes_per_cycle))
+        return 1024
 
     def get_dynamic_bank_overhead(self):
         if self.valid_conf_flag:
@@ -782,9 +1083,41 @@ class scale_config:
             return str(self.communication_model)
         return 'latency_plus_bandwidth'
 
-    def get_enable_communication_overlap(self):
+    def get_precision_bytes(self):
         if self.valid_conf_flag:
-            return bool(self.enable_communication_overlap)
+            return max(1, int(self.precision_bytes))
+        return 2
+
+    def get_communication_latency_cycles(self):
+        if self.valid_conf_flag:
+            return max(0, int(self.communication_latency_cycles))
+        return 0
+
+    def get_communication_bandwidth_bytes_per_cycle(self):
+        if self.valid_conf_flag:
+            return max(1, int(self.communication_bandwidth_bytes_per_cycle))
+        return 128
+
+    def get_communication_input_bytes_per_elem(self):
+        """Backward-compatible alias for the unified precision setting."""
+        return self.get_precision_bytes()
+
+    def get_communication_output_bytes_per_elem(self):
+        """Backward-compatible alias for the unified precision setting."""
+        return self.get_precision_bytes()
+
+    def get_communication_overlap_mode(self):
+        if self.valid_conf_flag:
+            return str(self.communication_overlap_mode).lower().strip()
+        return 'prefetch_only'
+
+    def get_enable_communication_overlap(self):
+        """Backward-compatible alias for AllowCommPrefetchOverlap."""
+        return self.get_allow_comm_prefetch_overlap()
+
+    def get_allow_comm_prefetch_overlap(self):
+        if self.valid_conf_flag:
+            return bool(self.allow_comm_prefetch_overlap)
         return True
 
     def get_enable_dynamic(self):

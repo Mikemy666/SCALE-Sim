@@ -118,6 +118,14 @@ class TensorBankModel:
             self.bank_base + i: 0
             for i in range(self.bank_count)
         }
+        self.per_bank_busy_cycles = {
+            self.bank_base + i: 0
+            for i in range(self.bank_count)
+        }
+        self.per_bank_conflict_count = {
+            self.bank_base + i: 0
+            for i in range(self.bank_count)
+        }
 
         self.serviced_cycle_per_line = []
 
@@ -151,6 +159,9 @@ class TensorBankModel:
                 self.total_conflict_delay += (service_cycle - int(req_cycle)) * served
                 self.total_requests += served
                 self.per_bank_access[physical_bank] += served
+                self.per_bank_busy_cycles[physical_bank] += self.service_cycles
+                if service_cycle > int(req_cycle):
+                    self.per_bank_conflict_count[physical_bank] += served
 
                 if service_cycle > line_service_cycle:
                     line_service_cycle = service_cycle
@@ -1015,11 +1026,11 @@ class banked_memory_system:
             return 0.0
         return bytes_in_tensor / capacity_bytes
 
-    def _per_bank_cycle_utilization(self, per_bank_access):
-        denom = float(self.total_cycles + 1) if self.total_cycles >= 0 else 1.0
+    def _per_bank_cycle_utilization(self, per_bank_busy_cycles, port_count=1):
+        denom = float(max(1, self.total_cycles + 1) * max(1, int(port_count)))
         return {
-            int(bank_id): float(accesses) / denom
-            for bank_id, accesses in per_bank_access.items()
+            int(bank_id): min(1.0, float(busy_cycles) / denom)
+            for bank_id, busy_cycles in per_bank_busy_cycles.items()
         }
 
     def _populate_bank_report(self):
@@ -1109,9 +1120,19 @@ class banked_memory_system:
                 "ofmap": dict(self.ofmap_model.per_bank_access),
             },
             "per_bank_cycle_utilization": {
-                "ifmap": self._per_bank_cycle_utilization(self.ifmap_model.per_bank_access),
-                "filter": self._per_bank_cycle_utilization(self.filter_model.per_bank_access),
-                "ofmap": self._per_bank_cycle_utilization(self.ofmap_model.per_bank_access),
+                "ifmap": self._per_bank_cycle_utilization(self.ifmap_model.per_bank_busy_cycles, self.ifmap_model.port_count),
+                "filter": self._per_bank_cycle_utilization(self.filter_model.per_bank_busy_cycles, self.filter_model.port_count),
+                "ofmap": self._per_bank_cycle_utilization(self.ofmap_model.per_bank_busy_cycles, self.ofmap_model.port_count),
+            },
+            "per_bank_busy_cycles": {
+                "ifmap": dict(self.ifmap_model.per_bank_busy_cycles),
+                "filter": dict(self.filter_model.per_bank_busy_cycles),
+                "ofmap": dict(self.ofmap_model.per_bank_busy_cycles),
+            },
+            "per_bank_conflict_count": {
+                "ifmap": dict(self.ifmap_model.per_bank_conflict_count),
+                "filter": dict(self.filter_model.per_bank_conflict_count),
+                "ofmap": dict(self.ofmap_model.per_bank_conflict_count),
             },
         }
 

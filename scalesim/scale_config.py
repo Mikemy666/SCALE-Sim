@@ -102,6 +102,8 @@ class scale_config:
         self.enable_chunk_prefetch = False
         self.initial_chunk = 1
         self.chunk_prefetch_window = 0
+        # 0 preserves the legacy one-compute-tile-per-chunk behavior.
+        self.chunk_size_bytes = 0
         self.blackbox_workload_mode = 'analytical'
         self.blackbox_bandwidth_bytes_per_cycle = 128
         self.enable_blackbox_background_pressure = False
@@ -218,6 +220,8 @@ class scale_config:
             self.initial_chunk = config.getint(section, 'InitialChunk')
         if config.has_option(section, 'ChunkPrefetchWindow'):
             self.chunk_prefetch_window = config.getint(section, 'ChunkPrefetchWindow')
+        if config.has_option(section, 'ChunkSizeBytes'):
+            self.chunk_size_bytes = config.getint(section, 'ChunkSizeBytes')
         if config.has_option(section, 'BlackBoxWorkloadMode'):
             self.blackbox_workload_mode = str(config.get(section, 'BlackBoxWorkloadMode')).strip()
         if config.has_option(section, 'BlackBoxBandwidthBytesPerCycle'):
@@ -388,6 +392,8 @@ class scale_config:
                 raise ValueError("ERROR: InitialChunk must be positive")
             if self.chunk_prefetch_window < 0:
                 raise ValueError("ERROR: ChunkPrefetchWindow must be non-negative")
+            if self.chunk_size_bytes < 0:
+                raise ValueError("ERROR: ChunkSizeBytes must be non-negative")
             if self.precision_bytes <= 0:
                 raise ValueError("ERROR: PrecisionBytes must be positive")
             if self.blackbox_bandwidth_bytes_per_cycle <= 0:
@@ -578,6 +584,7 @@ class scale_config:
         config.set(section, 'EnableChunkPrefetch', str(self.enable_chunk_prefetch))
         config.set(section, 'InitialChunk', str(self.initial_chunk))
         config.set(section, 'ChunkPrefetchWindow', str(self.chunk_prefetch_window))
+        config.set(section, 'ChunkSizeBytes', str(self.chunk_size_bytes))
         config.set(section, 'BlackBoxWorkloadMode', str(self.blackbox_workload_mode))
         config.set(section, 'BlackBoxBandwidthBytesPerCycle', str(self.blackbox_bandwidth_bytes_per_cycle))
         config.set(section, 'EnableBlackBoxBackgroundPressure', str(self.enable_blackbox_background_pressure))
@@ -1051,6 +1058,12 @@ class scale_config:
     def get_chunk_prefetch_window(self):
         if self.valid_conf_flag and self.get_enable_chunk_prefetch():
             return max(0, int(self.chunk_prefetch_window))
+        return 0
+
+    def get_chunk_size_bytes(self):
+        """Configured weight-chunk target size; zero keeps legacy tile chunks."""
+        if self.valid_conf_flag:
+            return max(0, int(self.chunk_size_bytes))
         return 0
 
     def get_blackbox_workload_mode(self):

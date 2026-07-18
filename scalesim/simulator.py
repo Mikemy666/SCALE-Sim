@@ -403,9 +403,17 @@ class simulator:
         blackbox_bw = max(1, int(self.conf.get_blackbox_bandwidth_bytes_per_cycle()))
 
         for layer, stats in zip(expert['layers'], layer_stats):
-            num_tiles = max(1, int(stats['compute_tiles']))
+            configured_size = int(self.conf.get_chunk_size_bytes())
+            if configured_size > 0:
+                num_tiles = max(1, int(np.ceil(float(stats['weight_bytes']) / float(configured_size))))
+            else:
+                num_tiles = max(1, int(stats['compute_tiles']))
+            remaining_weight = int(stats['weight_bytes'])
+            remaining_compute = int(stats['compute_cycles'])
             for tile_id in range(num_tiles):
-                weight_bytes = int(stats['weight_chunk_bytes'])
+                chunks_left = num_tiles - tile_id
+                weight_bytes = int(np.ceil(float(remaining_weight) / float(chunks_left)))
+                compute_cycles = int(np.ceil(float(remaining_compute) / float(chunks_left)))
                 chunks.append({
                     'chunk_id': int(global_chunk_id),
                     'layer_id': int(layer['layer_id']),
@@ -414,13 +422,17 @@ class simulator:
                     'tile_id_in_layer': int(tile_id),
                     'current_weight_chunk': int(global_chunk_id),
                     'weight_bytes': int(weight_bytes),
+                    'configured_chunk_size_bytes': int(configured_size),
+                    'actual_chunk_size_bytes': int(weight_bytes),
                     'weight_load_cycles': max(1, int(np.ceil(float(weight_bytes) / float(blackbox_bw)))),
-                    'compute_cycles': int(stats['compute_tile_cycles']),
+                    'compute_cycles': max(1, int(compute_cycles)),
                     'chunk_source': 'analytical',
                     'loaded': False,
                     'prefetched': False,
                     'consumed': False,
                 })
+                remaining_weight -= weight_bytes
+                remaining_compute -= compute_cycles
                 global_chunk_id += 1
 
         return chunks
@@ -499,6 +511,8 @@ class simulator:
                 'tile_id_in_layer': int(tile_id),
                 'current_weight_chunk': int(tile_id),
                 'weight_bytes': int(weight_elements * precision_bytes),
+                'configured_chunk_size_bytes': int(self.conf.get_chunk_size_bytes()),
+                'actual_chunk_size_bytes': int(weight_elements * precision_bytes),
                 'weight_load_cycles': max(1, int(np.ceil(float(weight_elements * precision_bytes) / bandwidth))),
                 'compute_cycles': max(1, int(tile_end - weight_start)),
                 'trace_start_cycle': int(weight_start),
@@ -517,7 +531,89 @@ class simulator:
                 'prefetched': False,
                 'consumed': False,
             })
-        return chunks
+        return self._rechunk_detailed_trace_chunks(chunks)
+
+    def _rechunk_detailed_trace_chunks(self, chunks):
+        """Repartition consecutive trace-derived tiles to a target weight size.
+
+        The legacy trace tiles remain unchanged when ChunkSizeBytes is zero. A
+        positive target splits oversized tiles and packs adjacent small tiles;
+        aggregate bytes, requests, and compute cycles are conserved.
+        """
+        target = int(self.conf.get_chunk_size_bytes())
+        if target <= 0 or not chunks:
+            return chunks
+
+        scalar_fields = ('weight_bytes', 'weight_elements', 'compute_cycles',
+                         'ifmap_requests', 'filter_requests', 'ofmap_requests')
+        pieces = []
+        for chunk in chunks:
+            count = max(1, int(np.ceil(float(chunk['weight_bytes']) / float(target))))
+            remaining = {field: int(chunk.get(field, 0)) for field in scalar_fields}
+            raw_min = int(chunk['raw_weight_address_min'])
+            logical_min = int(chunk['logical_weight_address_min'])
+            trace_start = int(chunk['trace_start_cycle'])
+            trace_span = max(1, int(chunk['trace_end_cycle']) - trace_start)
+            for part in range(count):
+                left = count - part
+                item = dict(chunk)
+                for field in scalar_fields:
+                    value = int(np.ceil(float(remaining[field]) / float(left)))
+                    item[field] = value
+                    remaining[field] -= value
+                elem_count = max(1, int(item['weight_elements']))
+                item['raw_weight_address_min'] = raw_min
+                item['raw_weight_address_max'] = raw_min + elem_count - 1
+                item['logical_weight_address_min'] = logical_min
+                item['logical_weight_address_max'] = logical_min + elem_count - 1
+                raw_min += elem_count
+                logical_min += elem_count
+                part_start = trace_start + (trace_span * part) // count
+                part_end = trace_start + (trace_span * (part + 1)) // count
+                item['trace_start_cycle'] = part_start
+                item['trace_end_cycle'] = max(part_start + 1, part_end)
+                item['weight_trace_end_cycle'] = item['trace_end_cycle']
+                item['actual_chunk_size_bytes'] = int(item['weight_bytes'])
+                pieces.append(item)
+
+        packed = []
+        current = []
+        current_bytes = 0
+        for piece in pieces:
+            if current and current_bytes + int(piece['weight_bytes']) > target:
+                packed.append(self._merge_detailed_chunk_pieces(current, target))
+                current, current_bytes = [], 0
+            current.append(piece)
+            current_bytes += int(piece['weight_bytes'])
+        if current:
+            packed.append(self._merge_detailed_chunk_pieces(current, target))
+
+        bandwidth = max(1, int(self.conf.get_blackbox_bandwidth_bytes_per_cycle()))
+        for chunk_id, chunk in enumerate(packed):
+            chunk['chunk_id'] = chunk_id
+            chunk['current_weight_chunk'] = chunk_id
+            chunk['tile_id_in_layer'] = chunk_id
+            chunk['weight_load_cycles'] = max(
+                1, int(np.ceil(float(chunk['weight_bytes']) / float(bandwidth)))
+            )
+        return packed
+
+    @staticmethod
+    def _merge_detailed_chunk_pieces(pieces, target):
+        item = dict(pieces[0])
+        for field in ('weight_bytes', 'weight_elements', 'compute_cycles',
+                      'ifmap_requests', 'filter_requests', 'ofmap_requests'):
+            item[field] = sum(int(piece.get(field, 0)) for piece in pieces)
+        item['trace_start_cycle'] = min(int(piece['trace_start_cycle']) for piece in pieces)
+        item['trace_end_cycle'] = max(int(piece['trace_end_cycle']) for piece in pieces)
+        item['weight_trace_end_cycle'] = max(int(piece['weight_trace_end_cycle']) for piece in pieces)
+        item['raw_weight_address_min'] = min(int(piece['raw_weight_address_min']) for piece in pieces)
+        item['raw_weight_address_max'] = max(int(piece['raw_weight_address_max']) for piece in pieces)
+        item['logical_weight_address_min'] = min(int(piece['logical_weight_address_min']) for piece in pieces)
+        item['logical_weight_address_max'] = max(int(piece['logical_weight_address_max']) for piece in pieces)
+        item['configured_chunk_size_bytes'] = int(target)
+        item['actual_chunk_size_bytes'] = int(item['weight_bytes'])
+        return item
 
     def _refresh_detailed_ep_moe_chunk_plans(self):
         """Replace provisional analytical chunks for detailed-GPU experts."""
@@ -1979,6 +2075,7 @@ class simulator:
             ('EnableChunkPrefetch', self.conf.get_enable_chunk_prefetch()),
             ('InitialChunk', self.conf.get_initial_chunk()),
             ('ChunkPrefetchWindow', self.conf.get_chunk_prefetch_window()),
+            ('ChunkSizeBytes', self.conf.get_chunk_size_bytes()),
             ('BlackBoxWorkloadMode', self.conf.get_blackbox_workload_mode()),
             ('BlackBoxBandwidthBytesPerCycle', self.conf.get_blackbox_bandwidth_bytes_per_cycle()),
             ('EnableBlackBoxBackgroundPressure', self.conf.get_enable_blackbox_background_pressure()),
@@ -2123,6 +2220,7 @@ class simulator:
             'FFNPart', 'TileIDInLayer', 'ChunkSource', 'TraceStartCycle',
             'TraceEndCycle', 'WeightTraceEndCycle', 'ComputeCycles',
             'WeightElements', 'WeightBytes', 'WeightLoadCycles',
+            'ConfiguredChunkSizeBytes', 'ActualChunkSizeBytes',
             'RawWeightAddressMin', 'RawWeightAddressMax',
             'LogicalWeightAddressMin', 'LogicalWeightAddressMax',
             'IfmapRequests', 'FilterRequests', 'OfmapRequests',
@@ -2148,6 +2246,8 @@ class simulator:
                     'WeightElements': chunk.get('weight_elements', ''),
                     'WeightBytes': chunk.get('weight_bytes', 0),
                     'WeightLoadCycles': chunk.get('weight_load_cycles', 0),
+                    'ConfiguredChunkSizeBytes': chunk.get('configured_chunk_size_bytes', 0),
+                    'ActualChunkSizeBytes': chunk.get('actual_chunk_size_bytes', chunk.get('weight_bytes', 0)),
                     'RawWeightAddressMin': chunk.get('raw_weight_address_min', ''),
                     'RawWeightAddressMax': chunk.get('raw_weight_address_max', ''),
                     'LogicalWeightAddressMin': chunk.get('logical_weight_address_min', ''),
@@ -2462,6 +2562,7 @@ class simulator:
         detail_report.write(header)
 
         bank_model_report = None
+        bank_utilization_report = None
         if self.conf.get_enable_bank_model():
             bank_model_report_name = self.top_path + '/BANK_MODEL_REPORT.csv'
             bank_model_report = open(bank_model_report_name, 'w')
@@ -2479,6 +2580,17 @@ class simulator:
                        ' PrefetchResidualStall, PrefetchBankConflictCycles, EffectiveMemoryLatency, OriginalMemoryLatency,'
                        ' TotalCyclesWithPrefetch, TotalCyclesNoPrefetch,\n')
             bank_model_report.write(header)
+
+            bank_utilization_report_name = self.top_path + '/BANK_UTILIZATION_REPORT.csv'
+            bank_utilization_report = open(bank_utilization_report_name, 'w', newline='', encoding='utf-8')
+            bank_utilization_writer = csv.DictWriter(
+                bank_utilization_report,
+                fieldnames=[
+                    'LayerID', 'TensorType', 'BankID', 'AccessCount',
+                    'BusyCycles', 'Utilization', 'ConflictCount',
+                ],
+            )
+            bank_utilization_writer.writeheader()
 
         # Prefetch experiment report (always generated; zeros when disabled)
         prefetch_report_name = self.top_path + '/PREFETCH_REPORT.csv'
@@ -2588,6 +2700,23 @@ class simulator:
 
             if self.conf.get_enable_bank_model() and bank_model_report is not None and not is_blackbox_layer:
                 bank_items = single_layer_obj.get_bank_report_items()
+                per_bank_access = bank_items.get('per_bank_access_count', {})
+                per_bank_busy = bank_items.get('per_bank_busy_cycles', {})
+                per_bank_util = bank_items.get('per_bank_cycle_utilization', {})
+                per_bank_conflicts = bank_items.get('per_bank_conflict_count', {})
+                if bank_utilization_report is not None:
+                    for tensor_type in ('ifmap', 'filter', 'ofmap'):
+                        tensor_access = per_bank_access.get(tensor_type, {})
+                        for bank_id in sorted(tensor_access, key=int):
+                            bank_utilization_writer.writerow({
+                                'LayerID': int(lid),
+                                'TensorType': tensor_type,
+                                'BankID': int(bank_id),
+                                'AccessCount': int(tensor_access.get(bank_id, 0)),
+                                'BusyCycles': int(per_bank_busy.get(tensor_type, {}).get(bank_id, 0)),
+                                'Utilization': float(per_bank_util.get(tensor_type, {}).get(bank_id, 0.0)),
+                                'ConflictCount': int(per_bank_conflicts.get(tensor_type, {}).get(bank_id, 0)),
+                            })
                 log = str(lid) + ', '
                 log += ', '.join([
                     str(bank_items.get('EnableBankModel', False)),
@@ -2664,6 +2793,8 @@ class simulator:
             sparse_report.close()
         if bank_model_report is not None:
             bank_model_report.close()
+        if bank_utilization_report is not None:
+            bank_utilization_report.close()
 
         if self.conf.get_enable_ep_moe():
             self._write_ep_moe_config_report()

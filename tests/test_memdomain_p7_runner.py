@@ -43,7 +43,7 @@ class MemDomainRunnerTests(unittest.TestCase):
             candidate = replace(config, static_weight_banks=(bank,))
             fixed.append(run_raw_baseline(candidate, Baseline.STATIC_NOPF).total_cycles)
         self.assertEqual(selected.total_cycles, min(fixed))
-        self.assertTrue(selected.candidate_source.startswith("exhaustive_static_weight_groups:"))
+        self.assertTrue(selected.candidate_source.startswith("exhaustive_cyclic_static_weight_groups:"))
 
     def test_safe_and_oracle_never_exceed_static_no_prefetch(self):
         rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}

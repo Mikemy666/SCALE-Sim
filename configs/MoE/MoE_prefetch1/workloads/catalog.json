@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "model_id": "switch-base-8",
+      "display_name": "Switch Transformer Base (8 experts)",
+      "architecture_class": "homogeneous",
+      "source_title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+      "source_url": "https://arxiv.org/abs/2101.03961",
+      "source_locator": "paper architecture plus official google/switch-base-8 configuration",
+      "hidden_size": 768,
+      "routed_expert_intermediate_sizes": [2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048],
+      "top_k": 1,
+      "projection_count": 2,
+      "notes": "Equal-size ReLU FFN experts; official base-8 implementation profile."
+    },
+    {
+      "model_id": "mixtral-8x7b-v0.1",
+      "display_name": "Mixtral 8x7B v0.1",
+      "architecture_class": "homogeneous",
+      "source_title": "Mixtral of Experts",
+      "source_url": "https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/blob/main/config.json",
+      "source_locator": "official config: hidden_size, intermediate_size, num_local_experts, num_experts_per_tok",
+      "hidden_size": 4096,
+      "routed_expert_intermediate_sizes": [14336, 14336, 14336, 14336, 14336, 14336, 14336, 14336],
+      "top_k": 2,
+      "projection_count": 3,
+      "notes": "Eight equal-size SwiGLU experts."
+    },
+    {
+      "model_id": "modse-300m-8",
+      "display_name": "MoDSE 300M x 8",
+      "architecture_class": "heterogeneous_size",
+      "source_title": "Mixture of Diverse Size Experts",
+      "source_url": "https://aclanthology.org/2024.emnlp-industry.118/",
+      "source_locator": "Table 1 hidden dimension and Table 2 300M x 8 expert-size pairs",
+      "hidden_size": 3840,
+      "routed_expert_intermediate_sizes": [6912, 768, 6144, 1536, 4608, 3072, 3840, 3840],
+      "top_k": 2,
+      "projection_count": 2,
+      "notes": "Eight experts reconstructed from the four published size pairs."
+    },
+    {
+      "model_id": "deepseek-moe-16b",
+      "display_name": "DeepSeekMoE 16B",
+      "architecture_class": "shared_routed",
+      "source_title": "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models",
+      "source_url": "https://huggingface.co/deepseek-ai/deepseek-moe-16b-base/blob/main/config.json",
+      "source_locator": "official config and modeling_deepseek.py shared-expert construction",
+      "hidden_size": 2048,
+      "routed_expert_intermediate_sizes": [1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408, 1408],
+      "shared_expert_intermediate_sizes": [2816],
+      "top_k": 6,
+      "projection_count": 3,
+      "notes": "64 equal routed experts plus the official aggregate shared path equivalent to two 1408-wide shared experts."
+    }
+  ]
+}

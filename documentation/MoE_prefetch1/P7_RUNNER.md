@@ -11,10 +11,12 @@ online regressions remain present. Mapping overhead is charged only to dynamic
 rows and can cause Safe to select Static-NoPF.
 
 Static rows are not a hand-picked Bank target: the runner exhaustively searches
-all physical Weight Bank groups with the configured group width and selects the
-lowest end-to-end cycle result. The selected group is recorded in
-`candidate_source`. Compute-transfer overlap uses explicit compute intervals
-from the workload JSON.
+the declared static-partition space of all cyclic contiguous physical Weight
+Bank groups with the configured width and selects the lowest end-to-end cycle
+result. This matches static contiguous Bank ownership without introducing an
+intractable arbitrary-subset search. The selected group is recorded in
+`candidate_source`. "Best Static" always means best within this declared space.
+Compute-transfer overlap uses explicit compute intervals from the workload JSON.
 
 Run the smoke workload with:
 

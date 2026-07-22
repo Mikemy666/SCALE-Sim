@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from itertools import combinations
 from math import sqrt
 from pathlib import Path
 from typing import Dict, Mapping, Sequence, Tuple
@@ -305,7 +304,14 @@ def run_best_static_baseline(
         raise ValueError("static search accepts only static baselines")
     width = len(config.static_weight_banks)
     candidates = []
-    for group in combinations(range(config.resources.bank_count), width):
+    groups = []
+    for start in range(config.resources.bank_count):
+        group = tuple(
+            (start + offset) % config.resources.bank_count for offset in range(width)
+        )
+        if group not in groups:
+            groups.append(group)
+    for group in groups:
         candidate_config = RunnerConfig(
             experiment_id=config.experiment_id,
             workload_name=config.workload_name,
@@ -330,7 +336,7 @@ def run_best_static_baseline(
     from dataclasses import replace
     return replace(
         selected,
-        candidate_source="exhaustive_static_weight_groups:" + ":".join(map(str, group)),
+        candidate_source="exhaustive_cyclic_static_weight_groups:" + ":".join(map(str, group)),
     )
 
 

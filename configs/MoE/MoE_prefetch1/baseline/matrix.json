@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "baselines": [
+    {"name": "Static-NoPF", "mapping": "static", "prefetch": "none"},
+    {"name": "Static-NaivePF", "mapping": "static", "prefetch": "naive"},
+    {"name": "Dynamic-NoPF", "mapping": "runtime_dynamic", "prefetch": "none"},
+    {"name": "Dynamic-NaivePF", "mapping": "runtime_dynamic", "prefetch": "naive"},
+    {"name": "MemDomain-Raw", "mapping": "runtime_dynamic", "prefetch": "bank_aware"},
+    {"name": "MemDomain-Safe", "mapping": "safe_dynamic", "prefetch": "safe"},
+    {"name": "Oracle", "mapping": "oracle_dynamic", "prefetch": "oracle"}
+  ],
+  "output_root": "outputs/MoE_prefetch1",
+  "rtl_dc_scope": "external_system"
+}

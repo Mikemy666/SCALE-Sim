@@ -145,6 +145,21 @@ def _compute_interference(config: RunnerConfig, full_report, compute_only_report
     return max(delays, default=0)
 
 
+def _communication_stall(config: RunnerConfig) -> int:
+    system = config.payload.get("system", {})
+    if int(system.get("num_gpus", 1)) <= 1:
+        return 0
+    latency = int(system.get("communication_latency_cycles", 0))
+    bandwidth = float(system.get("communication_bandwidth_bytes_per_cycle", 1))
+    remote_fraction = float(system.get("remote_token_fraction", 0.0))
+    payload_bytes = int(system.get("token_payload_bytes", 0))
+    tokens = int(config.payload.get("topology_provenance", {}).get("total_tokens", 0))
+    if latency < 0 or bandwidth <= 0 or not 0.0 <= remote_fraction <= 1.0:
+        raise ValueError("invalid EP communication configuration")
+    remote_bytes = int(tokens * remote_fraction * payload_bytes)
+    return latency + int((remote_bytes + bandwidth - 1) // bandwidth) if remote_bytes else 0
+
+
 def _decisions(
     baseline: Baseline,
     config: RunnerConfig,
@@ -260,7 +275,7 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
         "prefetch_miss_stall_cycles": late_stall,
         "prefetch_interference_stall_cycles": interference,
         "mapping_overhead_cycles": mapping_overhead,
-        "communication_stall_cycles": 0,
+        "communication_stall_cycles": _communication_stall(config),
         "other_stall_cycles": 0,
     }
     total = sum(components.values())

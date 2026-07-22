@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "simulator_only": true,
+  "rtl_dc_out_of_scope": true,
+  "config_root": "/home/MikeNotFound/code/SCALE-Sim/configs/MoE/DATE2",
+  "topology_root": "/home/MikeNotFound/code/SCALE-Sim/topologies/MoE/DATE2",
+  "output_root": "/home/MikeNotFound/code/SCALE-Sim/outputs/DATE2",
+  "suites": {
+    "overall": 4,
+    "ablation": 1,
+    "window_chunk": 20,
+    "robustness": 16
+  }
+}

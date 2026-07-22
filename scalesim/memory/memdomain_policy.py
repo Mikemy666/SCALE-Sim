@@ -28,6 +28,8 @@ class ResourceBudget:
                 raise ValueError(f"{name} must be positive")
         if float(self.bandwidth_bytes_per_cycle) <= 0:
             raise ValueError("bandwidth_bytes_per_cycle must be positive")
+        if self.request_buffer_depth < self.ports_per_bank:
+            raise ValueError("request_buffer_depth must cover all Bank ports")
 
 
 @dataclass(frozen=True)

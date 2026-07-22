@@ -154,6 +154,7 @@ class VirtualBankMappingTable:
         obj: VirtualMemoryObject,
         cycle: int,
         pressure: Optional[Mapping[int, BankPressure]] = None,
+        bank_candidates: Optional[Tuple[int, ...]] = None,
     ) -> MappingRecord:
         if cycle < 0:
             raise ValueError("allocation cycle must be non-negative")
@@ -164,6 +165,16 @@ class VirtualBankMappingTable:
             raise MemoryError("bank_group_size exceeds physical Bank count")
 
         ordered = self._ordered_banks(pressure or {})
+        if bank_candidates is not None:
+            if len(set(bank_candidates)) != len(bank_candidates):
+                raise ValueError("duplicate Bank candidate")
+            if any(bank < 0 or bank >= self.resources.bank_count for bank in bank_candidates):
+                raise ValueError("Bank candidate out of range")
+            allowed = set(bank_candidates)
+            ordered = tuple(bank for bank in ordered if bank in allowed)
+            if len(ordered) < obj.bank_group_size:
+                self.allocation_failures += 1
+                raise MemoryError("insufficient Bank candidates for requested group")
         # Search combinations in policy order without changing state. A small
         # Bank count makes this deterministic bounded search appropriate here.
         from itertools import combinations

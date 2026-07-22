@@ -141,6 +141,7 @@ class ChunkResidencyManager:
         issue_cycle: int,
         load_kind: str,
         pressure: Optional[Mapping[int, BankPressure]],
+        preferred_banks: Optional[Tuple[int, ...]],
     ) -> UnifiedMemoryRequest:
         if self.finalized:
             raise ValueError("cannot schedule after transfer finalization")
@@ -160,7 +161,7 @@ class ChunkResidencyManager:
             tile_id=chunk.tile_id,
             chunk_id=chunk.tile_id,
         )
-        self.mapping.allocate(obj, issue_cycle, pressure)
+        self.mapping.allocate(obj, issue_cycle, pressure, preferred_banks)
         request_id = f"load:{chunk.chunk_id}"
         request = self.mapping.make_request(
             request_id=request_id,
@@ -180,16 +181,22 @@ class ChunkResidencyManager:
     def prefetch(
         self, chunk_id: str, issue_cycle: int,
         pressure: Optional[Mapping[int, BankPressure]] = None,
+        preferred_banks: Optional[Tuple[int, ...]] = None,
     ) -> UnifiedMemoryRequest:
-        return self._schedule(chunk_id, issue_cycle, "prefetch", pressure)
+        return self._schedule(
+            chunk_id, issue_cycle, "prefetch", pressure, preferred_banks
+        )
 
     def demand_load(
         self, chunk_id: str, issue_cycle: Optional[int] = None,
         pressure: Optional[Mapping[int, BankPressure]] = None,
+        preferred_banks: Optional[Tuple[int, ...]] = None,
     ) -> UnifiedMemoryRequest:
         runtime = self.chunks[chunk_id]
         issue = runtime.chunk.use_cycle if issue_cycle is None else issue_cycle
-        return self._schedule(chunk_id, issue, "demand", pressure)
+        return self._schedule(
+            chunk_id, issue, "demand", pressure, preferred_banks
+        )
 
     def cancel_prefetch(self, chunk_id: str, cycle: int) -> None:
         if self.finalized:

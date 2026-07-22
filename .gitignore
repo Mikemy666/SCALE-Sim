@@ -31,3 +31,5 @@ configs_test
 benchmark_results
 results/
 outputs/
+# Generated paper figures/tables; notebooks and plotting sources remain trackable.
+fig/generated/

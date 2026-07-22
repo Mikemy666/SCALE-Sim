@@ -46,7 +46,9 @@ class MoEWorkloadCatalogTests(unittest.TestCase):
         provenance = payload["model_provenance"]
         self.assertTrue(provenance["derived_workload"])
         self.assertFalse(provenance["paper_scale_performance_claim"])
-        self.assertTrue(provenance["batch_capacity_inflated"])
+        self.assertTrue(provenance["streaming_fixed_capacity"])
+        self.assertNotIn("batch_capacity_inflated", provenance)
+        self.assertEqual(payload["hardware"]["capacity_bytes"], 24 * 64 * 1024)
         self.assertEqual(provenance["original_hidden_size"], 4096)
         self.assertLess(provenance["scaled_hidden_size"], 4096)
 

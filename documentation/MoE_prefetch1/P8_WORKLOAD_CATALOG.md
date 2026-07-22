@@ -14,14 +14,13 @@ an explicit `derived_workload=true` marker. They also set
 `paper_scale_performance_claim=false`: scaled workloads may support mechanism
 and sensitivity studies but are not passed off as full-model performance.
 
-P8 generated workloads also set `batch_capacity_inflated=true`. The P7 batch
-runner retains every Chunk mapping until transfer finalization, so generated
-capacity is at least four times total scaled weight bytes to keep the declared
-8/24 static Weight partition feasible. These runs validate architecture paths
-and model diversity only. Fixed-capacity paper experiments require the later
-event-driven streaming/release runner.
+P9 replaces the earlier batch-capacity accommodation. Generated workloads set
+`streaming_fixed_capacity=true` and use 24 Banks with 64 KiB per Bank,
+independent of aggregate model weight bytes. The event-driven runner releases
+each Chunk at consumption, so models larger than the on-chip domain execute by
+streaming through the fixed physical capacity.
 
 The generator emits the P7 JSON schema and is deterministic. Full-scale traces
-can reuse the same provenance fields with `dimension_divisor=1`, subject to the
-streaming-capacity integration required for weights larger than the on-chip
-domain.
+can reuse the same provenance fields with `dimension_divisor=1`; run time and
+trace size, rather than an artificially enlarged Bank capacity, are then the
+practical constraints.

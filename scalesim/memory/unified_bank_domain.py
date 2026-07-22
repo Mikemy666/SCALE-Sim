@@ -201,3 +201,126 @@ class UnifiedBankDomain:
             total_queue_wait_cycles=total_wait,
             finish_cycle=finish,
         )
+
+    def new_session(self) -> "UnifiedBankSession":
+        return UnifiedBankSession(self)
+
+
+class UnifiedBankSession:
+    """Persistent chronological request service for event-driven execution."""
+
+    def __init__(self, domain: UnifiedBankDomain):
+        self.domain = domain
+        resources = domain.resources
+        self.bank_ports = {
+            bank: [0] * resources.ports_per_bank
+            for bank in range(resources.bank_count)
+        }
+        self.outstanding = {bank: [] for bank in self.bank_ports}
+        self.accesses = {bank: 0 for bank in self.bank_ports}
+        self.busy = {bank: 0 for bank in self.bank_ports}
+        self.conflicts = {bank: 0 for bank in self.bank_ports}
+        self.queue_wait = {bank: 0 for bank in self.bank_ports}
+        self.max_queue_depth = {bank: 0 for bank in self.bank_ports}
+        self.per_tensor = {tensor: 0 for tensor in sorted(TENSOR_TYPES)}
+        self.services = []
+        self.request_ids = set()
+        self.total_bytes = 0
+        self.total_beats = 0
+        self.last_order_key = None
+
+    @staticmethod
+    def _order_key(request: UnifiedMemoryRequest) -> Tuple[int, int, str]:
+        return (request.issue_cycle, 1 if request.kind == "prefetch" else 0, request.request_id)
+
+    def submit(self, request: UnifiedMemoryRequest) -> RequestService:
+        key = self._order_key(request)
+        if self.last_order_key is not None and key < self.last_order_key:
+            raise ValueError("session requests must be submitted in chronological priority order")
+        if request.request_id in self.request_ids:
+            raise ValueError(f"duplicate request_id: {request.request_id}")
+        self.last_order_key = key
+        self.request_ids.add(request.request_id)
+
+        starts = []
+        completions = []
+        used_banks = []
+        beats = self.domain._beats(request)
+        for bank, beat_bytes in beats:
+            arrival = request.issue_cycle
+            self.outstanding[bank] = [
+                cycle for cycle in self.outstanding[bank] if cycle > arrival
+            ]
+            while len(self.outstanding[bank]) >= self.domain.resources.request_buffer_depth:
+                arrival = min(self.outstanding[bank])
+                self.outstanding[bank] = [
+                    cycle for cycle in self.outstanding[bank] if cycle > arrival
+                ]
+            port_index = min(
+                range(len(self.bank_ports[bank])),
+                key=lambda index: (self.bank_ports[bank][index], index),
+            )
+            ready = self.bank_ports[bank][port_index]
+            start = max(arrival, ready)
+            duration = max(
+                1, int(ceil(float(beat_bytes) / self.domain.per_bank_bandwidth))
+            )
+            completion = start + duration
+            self.bank_ports[bank][port_index] = completion
+            self.outstanding[bank].append(completion)
+            self.max_queue_depth[bank] = max(
+                self.max_queue_depth[bank], len(self.outstanding[bank])
+            )
+            wait = start - request.issue_cycle
+            self.accesses[bank] += 1
+            self.busy[bank] += duration
+            self.queue_wait[bank] += wait
+            if wait > 0:
+                self.conflicts[bank] += 1
+            starts.append(start)
+            completions.append(completion)
+            used_banks.append(bank)
+
+        service = RequestService(
+            request_id=request.request_id,
+            issue_cycle=request.issue_cycle,
+            start_cycle=min(starts),
+            completion_cycle=max(completions),
+            queue_wait_cycles=max(completions) - request.issue_cycle
+            - max(1, int(ceil(
+                float(request.size_bytes)
+                / self.domain.resources.bandwidth_bytes_per_cycle
+            ))),
+            banks=tuple(sorted(set(used_banks))),
+            beat_count=len(beats),
+        )
+        self.services.append(service)
+        self.per_tensor[request.tensor_type] += 1
+        self.total_bytes += request.size_bytes
+        self.total_beats += len(beats)
+        return service
+
+    def pressure(self) -> Mapping[int, Mapping[str, int]]:
+        return {
+            bank: {
+                "queue_depth": len(self.outstanding[bank]),
+                "busy_cycles": self.busy[bank],
+                "conflicts": self.conflicts[bank],
+            }
+            for bank in self.bank_ports
+        }
+
+    def report(self) -> UnifiedDomainReport:
+        return UnifiedDomainReport(
+            services=tuple(self.services),
+            per_bank_accesses=dict(self.accesses),
+            per_bank_busy_cycles=dict(self.busy),
+            per_bank_conflicts=dict(self.conflicts),
+            per_bank_queue_wait=dict(self.queue_wait),
+            per_bank_max_queue_depth=dict(self.max_queue_depth),
+            per_tensor_requests=dict(self.per_tensor),
+            total_bytes=self.total_bytes,
+            total_beats=self.total_beats,
+            total_queue_wait_cycles=sum(self.queue_wait.values()),
+            finish_cycle=max((item.completion_cycle for item in self.services), default=0),
+        )

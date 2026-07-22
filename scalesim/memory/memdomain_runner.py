@@ -6,9 +6,9 @@ import json
 from dataclasses import dataclass
 from math import sqrt
 from pathlib import Path
-from typing import Dict, Mapping, Sequence, Tuple
+from typing import Mapping, Sequence, Tuple
 
-from scalesim.memory.chunk_residency import ChunkResidencyManager, WeightChunk
+from scalesim.memory.chunk_residency import ChunkResidencyManager, WeightChunk, _intersection_cycles
 from scalesim.memory.memdomain_experiment import (
     Baseline,
     ExperimentRow,
@@ -18,6 +18,7 @@ from scalesim.memory.memdomain_experiment import (
     write_matrix,
 )
 from scalesim.memory.memdomain_policy import ResourceBudget
+from scalesim.memory.streaming_residency import StreamingLoadPlan, StreamingResidencyEngine
 from scalesim.memory.prefetch_policy import (
     BankAwarePrefetchPolicy,
     BankSnapshot,
@@ -25,7 +26,6 @@ from scalesim.memory.prefetch_policy import (
     NoPrefetchPolicy,
     PrefetchAction,
     PrefetchDecision,
-    apply_prefetch_decision,
 )
 from scalesim.memory.unified_bank_domain import UnifiedBankDomain, UnifiedMemoryRequest
 from scalesim.memory.virtual_bank_mapping import (
@@ -212,43 +212,40 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
             "least_occupied" if dynamic else "round_robin"
         )
     )
+    # Policy planning reads this mapping's capacity view; P9 owns execution.
     manager = ChunkResidencyManager(mapping)
-    for chunk in config.chunks:
-        manager.register(chunk)
-    manager.set_compute_intervals(config.compute_intervals)
     domain = UnifiedBankDomain(config.resources, config.interleave_bytes)
     pressure = _compute_pressure(config, domain)
     decisions = _decisions(baseline, config, manager, pressure)
     by_chunk = {chunk.chunk_id: chunk for chunk in config.chunks}
+    plans = []
     for decision in decisions:
+        preferred = tuple(decision.target_banks)
         if baseline in (Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF):
             preferred = config.static_weight_banks
-            if decision.action == PrefetchAction.PREFETCH:
-                decision = PrefetchDecision(
-                    decision.chunk_id, decision.action, decision.decision_cycle,
-                    decision.issue_cycle, preferred, False, decision.reason,
-                )
-            else:
-                manager.demand_load(decision.chunk_id, preferred_banks=preferred)
-                continue
-        apply_prefetch_decision(manager, decision, pressure)
+        chunk = by_chunk[decision.chunk_id]
+        if decision.action == PrefetchAction.PREFETCH:
+            plans.append(StreamingLoadPlan(
+                chunk, int(decision.issue_cycle), "prefetch", preferred,
+            ))
+        else:
+            plans.append(StreamingLoadPlan(
+                chunk, chunk.use_cycle, "demand", preferred,
+            ))
 
     compute_only = domain.simulate(config.compute_requests)
-    full = manager.finalize_transfers(domain, config.compute_requests)
-    for chunk in sorted(config.chunks, key=lambda item: (item.use_cycle, item.chunk_id)):
-        manager.consume(chunk.chunk_id)
-        runtime = manager.chunks[chunk.chunk_id]
-        manager.release(chunk.chunk_id, int(runtime.consume_cycle))
-
-    residency = manager.report()
+    residency = StreamingResidencyEngine(domain, mapping).run(
+        plans, config.compute_requests, pressure
+    )
+    full = residency.memory_report
     mapping_stats = mapping.statistics()
     bank_metrics = _bank_metrics(full)
     demand_stall = sum(
-        item.stall_cycles for item in manager.chunks.values()
+        item.miss_stall_cycles for item in residency.chunks
         if item.classification == "demand_miss"
     )
     late_stall = sum(
-        item.stall_cycles for item in manager.chunks.values()
+        item.miss_stall_cycles for item in residency.chunks
         if item.classification == "late"
     )
     base_bank_stall = max(
@@ -267,6 +264,15 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
         "other_stall_cycles": 0,
     }
     total = sum(components.values())
+    prefetches = [item for item in residency.chunks if item.effective_kind == "prefetch"]
+    timely = [item for item in prefetches if item.classification == "timely"]
+    late = [item for item in prefetches if item.classification == "late"]
+    transfer_intervals = [
+        (service.issue_cycle, service.completion_cycle)
+        for service in full.services if service.request_id.startswith("load:")
+    ]
+    def ratio(numerator: int, denominator: int) -> float:
+        return float(numerator) / float(denominator) if denominator else 0.0
     return ExperimentRow(
         schema_version=1,
         experiment_id=config.experiment_id,
@@ -282,15 +288,20 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
         total_cycles=total,
         **components,
         **bank_metrics,
-        prefetch_requests=residency.prefetch_requests,
-        prefetch_bytes=residency.total_prefetch_bytes,
-        prefetch_coverage=residency.prefetch_coverage,
-        prefetch_accuracy=residency.prefetch_accuracy,
-        timely_prefetch_ratio=residency.timely_prefetch_ratio,
-        late_prefetch_ratio=residency.late_prefetch_ratio,
-        unused_prefetch_ratio=residency.unused_prefetch_ratio,
-        prefetch_occupancy_byte_cycles=residency.prefetch_occupancy_byte_cycles,
-        compute_transfer_overlap_cycles=residency.compute_transfer_overlap_cycles,
+        prefetch_requests=len(prefetches),
+        prefetch_bytes=sum(by_chunk[item.chunk_id].size_bytes for item in prefetches),
+        prefetch_coverage=ratio(len(prefetches), len(residency.chunks)),
+        prefetch_accuracy=ratio(len(prefetches), len(prefetches)),
+        timely_prefetch_ratio=ratio(len(timely), len(prefetches)),
+        late_prefetch_ratio=ratio(len(late), len(prefetches)),
+        unused_prefetch_ratio=0.0,
+        prefetch_occupancy_byte_cycles=sum(
+            by_chunk[item.chunk_id].size_bytes * (item.release_cycle - item.actual_issue_cycle)
+            for item in prefetches
+        ),
+        compute_transfer_overlap_cycles=_intersection_cycles(
+            config.compute_intervals, transfer_intervals
+        ),
         mapping_count=mapping_stats.mapping_count,
         mapping_failures=mapping_stats.allocation_failures,
         peak_occupied_bytes=mapping_stats.peak_occupied_bytes,

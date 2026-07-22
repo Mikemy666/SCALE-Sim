@@ -140,12 +140,9 @@ def generate_runner_payload(
     for shared_id, intermediate in enumerate(scaled_shared):
         add_expert(len(scaled_routed) + shared_id, intermediate, "shared")
 
-    total_chunk_bytes = sum(int(item["size_bytes"]) for item in chunks)
     bank_count = 24
-    # The P7 batch runner keeps all mappings live until transfer finalization.
-    # Reserve enough aggregate capacity for the 8/24 static Weight partition.
-    # This is a functional derived workload, not the fixed-capacity paper setup.
-    capacity = max(24 * 4096, total_chunk_bytes * 4)
+    # Fixed 64 KiB per physical Bank, independent of total model weights.
+    capacity = bank_count * 64 * 1024
     compute_cycles = max(use_cycle + 20, tokens * len(scaled_routed))
     payload = {
         "experiment_id": f"catalog-{spec.model_id}",
@@ -186,7 +183,7 @@ def generate_runner_payload(
             "scaled_shared_expert_intermediate_sizes": list(scaled_shared),
             "derived_workload": True,
             "paper_scale_performance_claim": False,
-            "batch_capacity_inflated": True,
+            "streaming_fixed_capacity": True,
         },
         "routing": {
             "tokens": tokens,

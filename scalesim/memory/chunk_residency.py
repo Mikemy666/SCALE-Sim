@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Iterable, Mapping, Optional, Tuple
 
-from scalesim.memory.unified_bank_domain import UnifiedBankDomain, UnifiedMemoryRequest
+from scalesim.memory.unified_bank_domain import (
+    UnifiedBankDomain,
+    UnifiedDomainReport,
+    UnifiedMemoryRequest,
+)
 from scalesim.memory.virtual_bank_mapping import (
     BankPressure,
     VirtualBankMappingTable,
@@ -119,6 +123,7 @@ class ChunkResidencyManager:
         self.compute_intervals: Tuple[Tuple[int, int], ...] = ()
         self.finalized = False
         self.canceled_prefetches = 0
+        self.transfer_report: Optional[UnifiedDomainReport] = None
 
     def register(self, chunk: WeightChunk) -> ChunkRuntime:
         if chunk.chunk_id in self.chunks:
@@ -213,15 +218,21 @@ class ChunkResidencyManager:
         runtime.classification = "canceled"
         self.canceled_prefetches += 1
 
-    def finalize_transfers(self, domain: UnifiedBankDomain) -> None:
+    def finalize_transfers(
+        self,
+        domain: UnifiedBankDomain,
+        concurrent_requests: Iterable[UnifiedMemoryRequest] = (),
+    ) -> UnifiedDomainReport:
         if self.finalized:
             raise ValueError("transfers already finalized")
-        report = domain.simulate(self.requests.values())
+        report = domain.simulate((*self.requests.values(), *tuple(concurrent_requests)))
         by_id = {service.request_id: service for service in report.services}
         for runtime in self.chunks.values():
             if runtime.state == ChunkState.LOADING:
                 runtime.completion_cycle = by_id[str(runtime.request_id)].completion_cycle
         self.finalized = True
+        self.transfer_report = report
+        return report
 
     def advance(self, cycle: int) -> None:
         if not self.finalized:

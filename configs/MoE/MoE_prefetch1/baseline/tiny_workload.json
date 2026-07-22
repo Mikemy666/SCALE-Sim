@@ -1,0 +1,30 @@
+{
+  "experiment_id": "p7-smoke",
+  "workload_name": "synthetic-moe-tiny",
+  "compute_cycles": 100,
+  "compute_intervals": [[0, 100]],
+  "hardware": {
+    "bank_count": 4,
+    "capacity_bytes": 4096,
+    "bandwidth_bytes_per_cycle": 64,
+    "ports_per_bank": 1,
+    "request_buffer_depth": 8,
+    "interleave_bytes": 16
+  },
+  "policy": {
+    "mapping_overhead_per_object": 1,
+    "prefetch_window": 8,
+    "queue_threshold": 1,
+    "conflict_threshold": 2,
+    "busy_threshold": 16,
+    "static_weight_banks": [0]
+  },
+  "chunks": [
+    {"chunk_id": "e0_ff1_c0", "expert_id": 0, "ffn_part": 1, "tile_id": 0, "size_bytes": 64, "use_cycle": 20, "logical_address": 0, "bank_group_size": 1},
+    {"chunk_id": "e0_ff1_c1", "expert_id": 0, "ffn_part": 1, "tile_id": 1, "size_bytes": 64, "use_cycle": 40, "logical_address": 64, "bank_group_size": 1}
+  ],
+  "compute_requests": [
+    {"request_id": "compute_ia_0", "issue_cycle": 12, "tensor_type": "ia", "object_id": "ia0", "address": 0, "size_bytes": 64, "kind": "read", "preferred_banks": [0]},
+    {"request_id": "compute_acc_0", "issue_cycle": 32, "tensor_type": "accumulator", "object_id": "acc0", "address": 0, "size_bytes": 64, "kind": "write", "preferred_banks": [0]}
+  ]
+}

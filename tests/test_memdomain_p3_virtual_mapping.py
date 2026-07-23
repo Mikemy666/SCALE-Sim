@@ -64,6 +64,14 @@ class VirtualBankMappingTests(unittest.TestCase):
         record = table.allocate(self.obj("w"), 0, pressure)
         self.assertNotIn(0, record.physical_banks)
 
+    def test_conflict_aware_group_avoids_active_lifetime_overlap(self):
+        table = VirtualBankMappingTable(self.resources, "conflict_aware")
+        first = table.allocate(self.obj("a", size=40, group=2), 0)
+        second = table.allocate(self.obj("b", size=40, group=2), 0)
+        self.assertTrue(
+            set(first.physical_banks).isdisjoint(second.physical_banks)
+        )
+
     def test_round_robin_is_deterministic(self):
         table = VirtualBankMappingTable(self.resources, "round_robin")
         banks = [table.allocate(self.obj(str(index), size=10), 0).physical_banks[0]

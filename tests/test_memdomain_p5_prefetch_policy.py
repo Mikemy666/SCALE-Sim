@@ -53,20 +53,20 @@ class PrefetchPolicyTests(unittest.TestCase):
         self.assertNotIn(0, decision.target_banks)
         self.assertTrue(decision.redirected)
 
-    def test_bank_aware_delays_when_pressure_high_but_slack_remains(self):
+    def test_bank_aware_keeps_prefetch_when_all_banks_are_hot(self):
         pressure = {bank: BankPressure(10, 100, 20) for bank in range(4)}
         decision = BankAwarePrefetchPolicy().decide(
             self.chunk, BankSnapshot(0, pressure, {bank: 100 for bank in range(4)}), 5
         )
-        self.assertEqual(decision.action, PrefetchAction.DELAY)
-        self.assertEqual(decision.issue_cycle, 1)
+        self.assertEqual(decision.action, PrefetchAction.PREFETCH)
+        self.assertEqual(decision.issue_cycle, 0)
 
-    def test_bank_aware_cancels_speculation_when_too_late(self):
+    def test_bank_aware_preserves_late_but_capacity_feasible_prefetch(self):
         pressure = {bank: BankPressure(10, 100, 20) for bank in range(4)}
         decision = BankAwarePrefetchPolicy().decide(
             self.chunk, BankSnapshot(16, pressure, {bank: 100 for bank in range(4)}), 5
         )
-        self.assertEqual(decision.action, PrefetchAction.CANCEL)
+        self.assertEqual(decision.action, PrefetchAction.PREFETCH)
 
     def test_capacity_is_checked_across_selected_group(self):
         chunk = WeightChunk("g", 0, 1, 0, 150, 20, 0, bank_group_size=2)
@@ -86,6 +86,14 @@ class PrefetchPolicyTests(unittest.TestCase):
         decision = BankAwarePrefetchPolicy().decide(chunk, snapshot, 5)
         self.assertEqual(decision.action, PrefetchAction.PREFETCH)
         self.assertEqual(set(decision.target_banks), {2, 3})
+
+    def test_virtual_mapping_receives_a_ranked_bank_pool(self):
+        decision = BankAwarePrefetchPolicy().decide(
+            self.chunk, self.snapshot(hot_bank=0), 5, default_banks=(0, 1)
+        )
+        self.assertEqual(decision.action, PrefetchAction.PREFETCH)
+        self.assertEqual(len(decision.target_banks), 2)
+        self.assertNotIn(0, decision.target_banks)
 
     def test_decision_targets_are_enforced_by_mapping(self):
         manager = ChunkResidencyManager(VirtualBankMappingTable(self.resources))

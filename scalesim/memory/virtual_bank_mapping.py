@@ -181,12 +181,36 @@ class VirtualBankMappingTable:
 
         selected = None
         planned = None
+        feasible = []
+        active_overlaps = {
+            bank: sum(
+                record.active and bank in record.physical_banks
+                for record in self.records.values()
+            )
+            for bank in range(self.resources.bank_count)
+        }
         for indices in combinations(range(len(ordered)), obj.bank_group_size):
             banks = tuple(ordered[index] for index in indices)
             candidate = self._plan_bytes(banks, obj.size_bytes)
             if candidate is not None:
-                selected, planned = banks, candidate
-                break
+                if self.policy != "conflict_aware":
+                    selected, planned = banks, candidate
+                    break
+                # P7: jointly score the complete Bank group. The primary term
+                # minimizes overlap among simultaneously resident virtual
+                # objects; pressure and occupancy break ties.
+                feasible.append((
+                    sum(active_overlaps[bank] for bank in banks),
+                    sum((pressure or {}).get(bank, BankPressure()).score
+                        for bank in banks),
+                    sum(self.bank_occupied[bank] for bank in banks),
+                    banks,
+                    candidate,
+                ))
+        if feasible:
+            _, _, _, selected, planned = min(
+                feasible, key=lambda item: item[:-1]
+            )
         if selected is None or planned is None:
             self.allocation_failures += 1
             raise MemoryError(f"insufficient unified Bank capacity for {obj.object_id}")

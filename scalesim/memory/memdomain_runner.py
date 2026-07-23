@@ -286,7 +286,9 @@ def _decisions(
         local_pressure = (_pressure_snapshot(
             compute_report, issue, config.resources.bank_count
         ) if compute_report is not None else pressure)
-        snapshot = BankSnapshot(issue, local_pressure, dict(free))
+        snapshot = BankSnapshot(
+            issue, local_pressure, dict(free), dict(manager.mapping.bank_capacity)
+        )
         estimate = max(1, int(
             (chunk.size_bytes + config.resources.bandwidth_bytes_per_cycle - 1)
             // config.resources.bandwidth_bytes_per_cycle

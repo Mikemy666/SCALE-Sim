@@ -34,12 +34,15 @@ class BankSnapshot:
     cycle: int
     pressure: Mapping[int, BankPressure]
     free_bytes: Mapping[int, int]
+    capacity_bytes: Mapping[int, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.cycle < 0:
             raise ValueError("snapshot cycle must be non-negative")
         if any(value < 0 for value in self.free_bytes.values()):
             raise ValueError("free Bank capacity must be non-negative")
+        if any(value <= 0 for value in self.capacity_bytes.values()):
+            raise ValueError("Bank capacity must be positive")
 
 
 @dataclass(frozen=True)
@@ -127,24 +130,78 @@ class BankAwarePrefetchPolicy:
                 issue_cycle=snapshot.cycle, reason="use_deadline_reached",
             )
 
-        candidates = []
-        for bank, free in snapshot.free_bytes.items():
-            pressure = snapshot.pressure.get(bank, BankPressure())
-            if free > 0 and not self._hot(pressure):
-                candidates.append(bank)
+        # P6: a hot Bank is an optimization cost, not a reason to remove the
+        # matched NaivePF request. Search every capacity-feasible group and
+        # minimize an end-to-end incremental-cost estimate.
+        candidates = [
+            bank for bank, free in snapshot.free_bytes.items() if free > 0
+        ]
         feasible_groups = []
+        defaults = tuple(default_banks)
+        slack = chunk.use_cycle - snapshot.cycle
         for group in combinations(sorted(candidates), chunk.bank_group_size):
             capacity = sum(snapshot.free_bytes.get(bank, 0) for bank in group)
             if capacity >= chunk.size_bytes:
-                pressure_score = sum(
-                    snapshot.pressure.get(bank, BankPressure()).score for bank in group
+                pressures = [
+                    snapshot.pressure.get(bank, BankPressure()) for bank in group
+                ]
+                queue_cost = sum(
+                    item.queue_depth * estimated_transfer_cycles
+                    for item in pressures
                 )
-                feasible_groups.append((pressure_score, -capacity, group))
+                occupancy_queue_cost = 0
+                for bank in group:
+                    capacity_bytes = snapshot.capacity_bytes.get(
+                        bank, snapshot.free_bytes[bank]
+                    )
+                    occupied_bytes = max(
+                        0, capacity_bytes - snapshot.free_bytes[bank]
+                    )
+                    occupancy_queue_cost += (
+                        (occupied_bytes + chunk.size_bytes - 1)
+                        // chunk.size_bytes
+                    ) * estimated_transfer_cycles
+                interference_cost = sum(
+                    min(item.busy_cycles, estimated_transfer_cycles)
+                    + item.conflicts * max(1, estimated_transfer_cycles // 2)
+                    for item in pressures
+                )
+                predicted_completion = (
+                    snapshot.cycle + estimated_transfer_cycles
+                    + queue_cost + occupancy_queue_cost
+                )
+                late_cost = max(0, predicted_completion - chunk.use_cycle)
+                incumbent_penalty = int(
+                    bool(defaults) and group != defaults[:len(group)]
+                )
+                feasible_groups.append((
+                    late_cost,
+                    occupancy_queue_cost,
+                    interference_cost,
+                    queue_cost,
+                    incumbent_penalty,
+                    -capacity,
+                    group,
+                ))
         feasible_groups.sort()
-        selected = feasible_groups[0][2] if feasible_groups else ()
+        selected = feasible_groups[0][-1] if feasible_groups else ()
+        # A virtual mapping decision supplies a feasible Bank pool rather than
+        # pinning the object to one prematurely chosen physical Bank. The
+        # lifetime-aware mapping table performs the final group selection at
+        # the real allocation event.
+        pool_width = max(chunk.bank_group_size, len(defaults))
+        selected_pool = []
+        for candidate in feasible_groups:
+            for bank in candidate[-1]:
+                if bank not in selected_pool:
+                    selected_pool.append(bank)
+                if len(selected_pool) >= pool_width:
+                    break
+            if len(selected_pool) >= pool_width:
+                break
+        target_banks = tuple(selected_pool) if selected_pool else selected
         enough_capacity = bool(selected)
         enough_banks = len(selected) == chunk.bank_group_size
-        slack = chunk.use_cycle - snapshot.cycle
 
         if not enough_banks or not enough_capacity:
             if slack > estimated_transfer_cycles + 1:
@@ -157,12 +214,11 @@ class BankAwarePrefetchPolicy:
                 reason="insufficient_safe_prefetch_slack",
             )
 
-        defaults = tuple(default_banks)
-        redirected = bool(defaults and selected != defaults[:len(selected)])
+        redirected = bool(defaults and target_banks != defaults[:len(target_banks)])
         return PrefetchDecision(
             chunk.chunk_id, PrefetchAction.PREFETCH, snapshot.cycle,
-            issue_cycle=snapshot.cycle, target_banks=selected,
-            redirected=redirected, reason="pressure_and_capacity_available",
+            issue_cycle=snapshot.cycle, target_banks=target_banks,
+            redirected=redirected, reason="minimum_incremental_cost",
         )
 
 

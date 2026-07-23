@@ -1,0 +1,5 @@
+,model_class,safe_selected,oracle_selected,safe_speedup,oracle_speedup,safe_gap_vs_oracle_percent,fallback_used
+HMoE,Heterogeneous,Static-NoPF,Static-NaivePF,1.0,1.9352759920541818,93.52759920541817,True
+MoDSE,Heterogeneous,MemDomain-Raw,MemDomain-Raw,1.7719471372457962,1.7719471372457962,0.0,False
+Mixtral,Homogeneous,Static-NoPF,Static-NaivePF,1.0,1.9699857462838526,96.99857462838526,True
+Switchtrans,Homogeneous,Static-NoPF,Static-NaivePF,1.0,1.9263628966639543,92.63628966639543,True

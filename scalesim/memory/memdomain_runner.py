@@ -390,6 +390,7 @@ def run_raw_baseline_with_details(
     decisions = _decisions(baseline, config, manager, pressure, compute_only)
     by_chunk = {chunk.chunk_id: chunk for chunk in config.chunks}
     plans = []
+    mapping_latency = config.mapping_overhead_per_object if dynamic else 0
     for decision in decisions:
         preferred = tuple(decision.target_banks)
         if baseline in (Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF):
@@ -398,10 +399,11 @@ def run_raw_baseline_with_details(
         if decision.action == PrefetchAction.PREFETCH:
             plans.append(StreamingLoadPlan(
                 chunk, int(decision.issue_cycle), "prefetch", preferred,
+                mapping_latency,
             ))
         else:
             plans.append(StreamingLoadPlan(
-                chunk, chunk.use_cycle, "demand", preferred,
+                chunk, chunk.use_cycle, "demand", preferred, mapping_latency,
             ))
 
     residency = StreamingResidencyEngine(domain, mapping).run(
@@ -410,19 +412,32 @@ def run_raw_baseline_with_details(
     full = residency.memory_report
     mapping_stats = mapping.statistics()
     bank_metrics = _bank_metrics(full)
+    exposed_by_chunk = {
+        item.chunk_id: min(
+            item.mapping_latency_cycles, item.miss_stall_cycles
+        )
+        for item in residency.chunks
+    }
     demand_stall = sum(
-        item.miss_stall_cycles for item in residency.chunks
+        item.miss_stall_cycles - exposed_by_chunk[item.chunk_id]
+        for item in residency.chunks
         if item.classification == "demand_miss"
     )
     late_stall = sum(
-        item.miss_stall_cycles for item in residency.chunks
+        item.miss_stall_cycles - exposed_by_chunk[item.chunk_id]
+        for item in residency.chunks
         if item.classification == "late"
     )
     base_bank_stall = max(
         (service.queue_wait_cycles for service in compute_only.services), default=0
     )
     interference = _compute_interference(config, full, compute_only)
-    mapping_overhead = mapping_stats.mapping_count * config.mapping_overhead_per_object if dynamic else 0
+    mapping_work = (
+        mapping_stats.mapping_count * config.mapping_overhead_per_object
+        if dynamic else 0
+    )
+    mapping_overhead = sum(exposed_by_chunk.values()) if dynamic else 0
+    mapping_hidden = mapping_work - mapping_overhead
     components = {
         "compute_cycles": config.compute_cycles,
         "bank_stall_cycles": base_bank_stall,
@@ -479,6 +494,8 @@ def run_raw_baseline_with_details(
         mapping_count=mapping_stats.mapping_count,
         mapping_failures=mapping_stats.allocation_failures,
         peak_occupied_bytes=mapping_stats.peak_occupied_bytes,
+        mapping_work_cycles=mapping_work,
+        mapping_hidden_cycles=mapping_hidden,
     )
     return RawBaselineExecution(row, residency.chunks, full)
 

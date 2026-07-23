@@ -50,8 +50,7 @@ class TimingAndPressureRegressionTests(unittest.TestCase):
         self.assertEqual(aware.prefetch_bytes, naive.prefetch_bytes)
         self.assertEqual(aware.prefetch_coverage, naive.prefetch_coverage)
         self.assertLess(aware.total_cycles, naive.total_cycles)
-        self.assertLess(aware.prefetch_interference_stall_cycles,
-                        naive.prefetch_interference_stall_cycles)
+        self.assertLess(aware.bank_conflict_count, naive.bank_conflict_count)
         self.assertGreater(aware.timely_prefetch_ratio,
                            naive.timely_prefetch_ratio)
 

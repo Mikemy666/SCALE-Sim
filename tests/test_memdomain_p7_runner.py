@@ -37,6 +37,22 @@ class MemDomainRunnerTests(unittest.TestCase):
         self.assertGreater(rows[Baseline.MEMDOMAIN_RAW.value].mapping_count, 0)
         self.assertGreater(rows[Baseline.STATIC_NAIVEPF.value].compute_transfer_overlap_cycles, 0)
 
+    def test_mapping_work_is_split_into_hidden_and_exposed_cycles(self):
+        rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}
+        for name in (
+            Baseline.DYNAMIC_NOPF.value,
+            Baseline.DYNAMIC_NAIVEPF.value,
+            Baseline.MEMDOMAIN_RAW.value,
+        ):
+            row = rows[name]
+            self.assertEqual(
+                row.mapping_work_cycles,
+                row.mapping_hidden_cycles + row.mapping_overhead_cycles,
+            )
+        self.assertEqual(
+            rows[Baseline.STATIC_NOPF.value].mapping_work_cycles, 0
+        )
+
     def test_static_rows_are_selected_from_exhaustive_equal_width_groups(self):
         config = load_runner_config(CONFIG)
         rows = {row.baseline: row for row in run_matrix(config)}

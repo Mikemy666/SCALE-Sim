@@ -26,9 +26,14 @@ class StreamingLoadPlan:
     issue_cycle: int
     load_kind: str
     preferred_banks: Tuple[int, ...] = ()
+    mapping_latency_cycles: int = 0
 
     def __post_init__(self) -> None:
-        if self.issue_cycle < 0 or self.load_kind not in {"demand", "prefetch"}:
+        if (
+            self.issue_cycle < 0
+            or self.load_kind not in {"demand", "prefetch"}
+            or self.mapping_latency_cycles < 0
+        ):
             raise ValueError("invalid streaming load plan")
 
 
@@ -47,6 +52,8 @@ class StreamingChunkResult:
     miss_stall_cycles: int
     classification: str
     physical_banks: Tuple[int, ...]
+    mapping_latency_cycles: int = 0
+    mapping_ready_cycle: int = 0
 
 
 @dataclass(frozen=True)
@@ -115,6 +122,20 @@ class StreamingResidencyEngine:
 
             plan = payload
             chunk = plan.chunk
+            if event_type == "load" and plan.mapping_latency_cycles:
+                ready = cycle + plan.mapping_latency_cycles
+                ready_kind = "read" if ready >= chunk.use_cycle else (
+                    "prefetch" if plan.load_kind == "prefetch" else "read"
+                )
+                ready_key = (
+                    ready, 1 if ready_kind == "prefetch" else 0,
+                    f"load:{chunk.chunk_id}",
+                )
+                heapq.heappush(
+                    events, (ready_key, sequence, "mapped_load", plan, original_issue)
+                )
+                sequence += 1
+                continue
             effective_kind = plan.load_kind
             if cycle >= chunk.use_cycle:
                 effective_kind = "demand"
@@ -143,7 +164,7 @@ class StreamingResidencyEngine:
                 )
                 retry_key = (retry, 1 if retry_kind == "prefetch" else 0, f"load:{chunk.chunk_id}")
                 heapq.heappush(
-                    events, (retry_key, sequence, "load", plan, original_issue)
+                    events, (retry_key, sequence, "mapped_load", plan, original_issue)
                 )
                 sequence += 1
                 continue
@@ -179,6 +200,10 @@ class StreamingResidencyEngine:
                 miss_stall_cycles=stall,
                 classification=classification,
                 physical_banks=record.physical_banks,
+                mapping_latency_cycles=plan.mapping_latency_cycles,
+                mapping_ready_cycle=(
+                    int(original_issue) + plan.mapping_latency_cycles
+                ),
             ))
             occupancy_byte_cycles += chunk.size_bytes * (release - cycle)
 

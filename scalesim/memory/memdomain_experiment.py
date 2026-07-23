@@ -73,6 +73,8 @@ class ExperimentRow:
     peak_occupied_bytes: int = 0
     fallback_used: bool = False
     selected_candidate: str = ""
+    mapping_work_cycles: int = 0
+    mapping_hidden_cycles: int = 0
 
     def __post_init__(self) -> None:
         if self.schema_version != 1:
@@ -89,7 +91,7 @@ class ExperimentRow:
             "total_cycles", "bank_conflict_count", "max_queue_depth", "prefetch_requests",
             "prefetch_bytes", "prefetch_occupancy_byte_cycles",
             "compute_transfer_overlap_cycles", "mapping_count", "mapping_failures",
-            "peak_occupied_bytes",
+            "peak_occupied_bytes", "mapping_work_cycles", "mapping_hidden_cycles",
         )
         if any(int(getattr(self, name)) < 0 for name in non_negative):
             raise ValueError("integer result fields must be non-negative")
@@ -118,6 +120,12 @@ class ExperimentRow:
             raise ValueError(
                 f"total cycle accounting mismatch for {self.baseline}: "
                 f"reported={self.total_cycles}, components={expected}"
+            )
+        if self.mapping_work_cycles != (
+            self.mapping_hidden_cycles + self.mapping_overhead_cycles
+        ):
+            raise ValueError(
+                "mapping work must equal hidden plus exposed mapping cycles"
             )
 
     @property
@@ -302,9 +310,15 @@ def read_matrix(path: Path) -> Tuple[ExperimentRow, ...]:
         for raw in csv.DictReader(stream):
             values = dict(raw)
             for name in integer_fields:
-                values[name] = int(values[name])
+                if name not in values or values[name] == "":
+                    values[name] = (
+                        int(values.get("mapping_overhead_cycles", 0))
+                        if name == "mapping_work_cycles" else 0
+                    )
+                else:
+                    values[name] = int(values[name])
             for name in float_fields:
-                values[name] = float(values[name])
+                values[name] = float(values.get(name, 0.0) or 0.0)
             values["fallback_used"] = values["fallback_used"].strip().lower() == "true"
             rows.append(ExperimentRow(**values))
     return validate_matrix(rows)

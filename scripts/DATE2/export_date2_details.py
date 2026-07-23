@@ -43,6 +43,7 @@ def export(config_path,output_dir):
             chunk=by_chunk[item.chunk_id]; service=services[f"load:{item.chunk_id}"]
             row={"baseline":baseline.value,"chunk_id":item.chunk_id,"expert_id":chunk.expert_id,"ffn_part":chunk.ffn_part,"tile_id":chunk.tile_id,"size_bytes":chunk.size_bytes,
                  "planned_kind":item.planned_kind,"effective_kind":item.effective_kind,"planned_issue_cycle":item.planned_issue_cycle,"actual_issue_cycle":item.actual_issue_cycle,"completion_cycle":item.completion_cycle,
+                 "mapping_latency_cycles":item.mapping_latency_cycles,"mapping_ready_cycle":item.mapping_ready_cycle,
                  "use_cycle":item.use_cycle,"consume_cycle":item.consume_cycle,"allocation_wait_cycles":item.allocation_wait_cycles,"miss_stall_cycles":item.miss_stall_cycles,"classification":item.classification,
                  "physical_banks":"|".join(map(str,item.physical_banks)),"queue_wait_cycles":service.queue_wait_cycles}
             chunk_rows.append(row)

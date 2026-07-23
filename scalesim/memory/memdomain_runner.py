@@ -213,7 +213,10 @@ def _communication_stall(config: RunnerConfig) -> int:
 def _effective_prefetch_window(
     config: RunnerConfig, baseline: Baseline
 ) -> int:
-    if baseline != Baseline.MEMDOMAIN_RAW or not config.adaptive_prefetch:
+    if (
+        baseline not in (Baseline.MEMDOMAIN_RAW, Baseline.MEMDOMAIN_SAFE)
+        or not config.adaptive_prefetch
+    ):
         return config.prefetch_window
     largest_chunk = max((chunk.size_bytes for chunk in config.chunks), default=1)
     capacity_window = max(
@@ -326,7 +329,9 @@ def _decisions(
             // config.resources.bandwidth_bytes_per_cycle
         ))
         decision = policy.decide(
-            chunk, snapshot, estimate, config.static_weight_banks
+            chunk, snapshot, estimate, config.static_weight_banks,
+            guard_incumbent=(baseline == Baseline.MEMDOMAIN_SAFE),
+            switching_cost_cycles=config.mapping_overhead_per_object,
         )
         if decision.action == PrefetchAction.DELAY:
             heapq.heappush(
@@ -366,13 +371,17 @@ def run_raw_baseline_with_details(
     if baseline not in {
         Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF, Baseline.DYNAMIC_NOPF,
         Baseline.DYNAMIC_NAIVEPF, Baseline.MEMDOMAIN_RAW,
+        Baseline.MEMDOMAIN_SAFE,
     }:
         raise ValueError("run_raw_baseline accepts only measured baseline kinds")
     dynamic = baseline in {
         Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF, Baseline.MEMDOMAIN_RAW,
+        Baseline.MEMDOMAIN_SAFE,
     }
     mapping = VirtualBankMappingTable(
-        config.resources, "conflict_aware" if baseline == Baseline.MEMDOMAIN_RAW else (
+        config.resources, "conflict_aware" if baseline in (
+            Baseline.MEMDOMAIN_RAW, Baseline.MEMDOMAIN_SAFE
+        ) else (
             "least_occupied" if dynamic else "round_robin"
         )
     )
@@ -390,8 +399,15 @@ def run_raw_baseline_with_details(
     decisions = _decisions(baseline, config, manager, pressure, compute_only)
     by_chunk = {chunk.chunk_id: chunk for chunk in config.chunks}
     plans = []
-    mapping_latency = config.mapping_overhead_per_object if dynamic else 0
     for decision in decisions:
+        mapping_latency = (
+            config.mapping_overhead_per_object
+            if dynamic and (
+                baseline != Baseline.MEMDOMAIN_SAFE
+                or decision.guard_committed
+            )
+            else 0
+        )
         preferred = tuple(decision.target_banks)
         if baseline in (Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF):
             preferred = config.static_weight_banks
@@ -432,9 +448,13 @@ def run_raw_baseline_with_details(
         (service.queue_wait_cycles for service in compute_only.services), default=0
     )
     interference = _compute_interference(config, full, compute_only)
+    committed_mappings = (
+        sum(item.guard_committed for item in decisions)
+        if baseline == Baseline.MEMDOMAIN_SAFE
+        else mapping_stats.mapping_count
+    )
     mapping_work = (
-        mapping_stats.mapping_count * config.mapping_overhead_per_object
-        if dynamic else 0
+        committed_mappings * config.mapping_overhead_per_object if dynamic else 0
     )
     mapping_overhead = sum(exposed_by_chunk.values()) if dynamic else 0
     mapping_hidden = mapping_work - mapping_overhead
@@ -466,7 +486,8 @@ def run_raw_baseline_with_details(
         baseline=baseline.value,
         candidate_source=(
             f"measured:adaptive_window={_effective_prefetch_window(config, baseline)}"
-            if baseline == Baseline.MEMDOMAIN_RAW and config.adaptive_prefetch
+            if baseline in (Baseline.MEMDOMAIN_RAW, Baseline.MEMDOMAIN_SAFE)
+            and config.adaptive_prefetch
             else "measured"
         ),
         bank_count=config.resources.bank_count,
@@ -496,6 +517,14 @@ def run_raw_baseline_with_details(
         peak_occupied_bytes=mapping_stats.peak_occupied_bytes,
         mapping_work_cycles=mapping_work,
         mapping_hidden_cycles=mapping_hidden,
+        fallback_used=(
+            baseline == Baseline.MEMDOMAIN_SAFE
+            and any(not item.guard_committed for item in decisions)
+        ),
+        selected_candidate=(
+            "Online-Guarded-Full"
+            if baseline == Baseline.MEMDOMAIN_SAFE else ""
+        ),
     )
     return RawBaselineExecution(row, residency.chunks, full)
 
@@ -629,17 +658,14 @@ def run_matrix(config: RunnerConfig) -> Tuple[ExperimentRow, ...]:
     )
     _assert_matched_naive_prefetch_plans(static_pf, dynamic_pf)
     raw_execution = run_raw_baseline_with_details(config, Baseline.MEMDOMAIN_RAW)
+    safe_execution = run_raw_baseline_with_details(
+        config, Baseline.MEMDOMAIN_SAFE
+    )
     raw = [
         static.row, static_pf.row, dynamic.row, dynamic_pf.row, raw_execution.row,
     ]
     by_name = {row.baseline: row for row in raw}
-    safe = derive_selected_row(
-        Baseline.MEMDOMAIN_SAFE,
-        raw,
-        [Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF,
-         Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF,
-         Baseline.MEMDOMAIN_RAW],
-    )
+    safe = safe_execution.row
     oracle = derive_selected_row(
         Baseline.ORACLE, [*raw, safe],
         [Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF, Baseline.DYNAMIC_NOPF,

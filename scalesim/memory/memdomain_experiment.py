@@ -198,10 +198,14 @@ def validate_matrix(rows: Iterable[ExperimentRow]) -> Tuple[ExperimentRow, ...]:
         Baseline.DYNAMIC_NAIVEPF.value,
         Baseline.MEMDOMAIN_RAW.value,
     }
-    if safe.selected_candidate not in implementable_safe_candidates:
-        raise ValueError("Safe row has invalid selected-candidate provenance")
-    selected_safe = by_baseline[safe.selected_candidate]
-    _assert_derived_copy(safe, selected_safe, "Safe")
+    if safe.selected_candidate == "Online-Guarded-Full":
+        if not safe.candidate_source.startswith("measured"):
+            raise ValueError("online Safe row must come from measured execution")
+    else:
+        if safe.selected_candidate not in implementable_safe_candidates:
+            raise ValueError("Safe row has invalid selected-candidate provenance")
+        selected_safe = by_baseline[safe.selected_candidate]
+        _assert_derived_copy(safe, selected_safe, "Safe")
     if oracle.selected_candidate not in set(REQUIRED_BASELINES) - {Baseline.ORACLE.value}:
         raise ValueError("Oracle row has invalid selected-candidate provenance")
     selected_oracle = by_baseline[oracle.selected_candidate]

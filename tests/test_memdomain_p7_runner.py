@@ -70,6 +70,12 @@ class MemDomainRunnerTests(unittest.TestCase):
         self.assertLessEqual(rows[Baseline.MEMDOMAIN_SAFE.value].total_cycles, static)
         self.assertLessEqual(rows[Baseline.ORACLE.value].total_cycles, static)
 
+    def test_safe_is_an_independently_measured_online_policy(self):
+        rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}
+        safe = rows[Baseline.MEMDOMAIN_SAFE.value]
+        self.assertEqual(safe.selected_candidate, "Online-Guarded-Full")
+        self.assertTrue(safe.candidate_source.startswith("measured"))
+
     def test_dynamic_search_contains_matched_static_incumbent(self):
         rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}
         self.assertLessEqual(
@@ -93,7 +99,9 @@ class MemDomainRunnerTests(unittest.TestCase):
         rows = {row.baseline: row for row in run_matrix(config)}
         safe = rows[Baseline.MEMDOMAIN_SAFE.value]
         self.assertTrue(safe.fallback_used)
-        self.assertEqual(safe.selected_candidate, Baseline.DYNAMIC_NAIVEPF.value)
+        self.assertEqual(safe.selected_candidate, "Online-Guarded-Full")
+        self.assertLess(safe.mapping_work_cycles,
+                        rows[Baseline.MEMDOMAIN_RAW.value].mapping_work_cycles)
 
     def test_matrix_file_is_byte_deterministic_after_p1_p2(self):
         with tempfile.TemporaryDirectory() as directory:

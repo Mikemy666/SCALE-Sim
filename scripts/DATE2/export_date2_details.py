@@ -13,7 +13,8 @@ from scalesim.memory.memdomain_runner import (
     run_raw_baseline_with_details,
 )
 
-RAW=(Baseline.STATIC_NOPF,Baseline.STATIC_NAIVEPF,Baseline.DYNAMIC_NOPF,Baseline.DYNAMIC_NAIVEPF,Baseline.MEMDOMAIN_RAW)
+RAW=(Baseline.STATIC_NOPF,Baseline.STATIC_NAIVEPF,Baseline.DYNAMIC_NOPF,
+     Baseline.DYNAMIC_NAIVEPF,Baseline.MEMDOMAIN_RAW,Baseline.MEMDOMAIN_SAFE)
 
 def write(path,rows):
     if not rows:return

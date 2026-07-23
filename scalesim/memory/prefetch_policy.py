@@ -27,6 +27,7 @@ class PrefetchDecision:
     target_banks: Tuple[int, ...] = field(default_factory=tuple)
     redirected: bool = False
     reason: str = ""
+    guard_committed: bool = True
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,8 @@ class BankAwarePrefetchPolicy:
         snapshot: BankSnapshot,
         estimated_transfer_cycles: int,
         default_banks: Sequence[int] = (),
+        guard_incumbent: bool = False,
+        switching_cost_cycles: int = 0,
     ) -> PrefetchDecision:
         if estimated_transfer_cycles <= 0:
             raise ValueError("estimated transfer cycles must be positive")
@@ -214,11 +217,36 @@ class BankAwarePrefetchPolicy:
                 reason="insufficient_safe_prefetch_slack",
             )
 
+        guard_committed = True
+        if guard_incumbent and defaults:
+            incumbent_groups = [
+                item for item in feasible_groups
+                if set(item[-1]).issubset(set(defaults))
+            ]
+            incumbent = min(incumbent_groups) if incumbent_groups else None
+            dynamic_cost = list(feasible_groups[0][:-1])
+            dynamic_cost[0] += max(
+                0, int(switching_cost_cycles) - max(0, slack)
+            )
+            dynamic_cost = tuple(dynamic_cost)
+            incumbent_cost = incumbent[:-1] if incumbent is not None else None
+            guard_committed = (
+                incumbent_cost is None or dynamic_cost <= incumbent_cost
+            )
+            if not guard_committed:
+                target_banks = defaults
+
         redirected = bool(defaults and target_banks != defaults[:len(target_banks)])
         return PrefetchDecision(
             chunk.chunk_id, PrefetchAction.PREFETCH, snapshot.cycle,
             issue_cycle=snapshot.cycle, target_banks=target_banks,
-            redirected=redirected, reason="minimum_incremental_cost",
+            redirected=redirected,
+            reason=(
+                "online_guard_commit" if guard_incumbent and guard_committed
+                else "online_guard_incumbent" if guard_incumbent
+                else "minimum_incremental_cost"
+            ),
+            guard_committed=guard_committed,
         )
 
 

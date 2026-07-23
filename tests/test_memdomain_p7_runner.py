@@ -3,7 +3,10 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from scalesim.memory.memdomain_experiment import Baseline, read_matrix
+from scalesim.memory.memdomain_experiment import (
+    Baseline,
+    TheoreticalContractViolation,
+)
 from scalesim.memory.memdomain_runner import (
     load_runner_config,
     run_matrix,
@@ -58,14 +61,12 @@ class MemDomainRunnerTests(unittest.TestCase):
         self.assertTrue(safe.fallback_used)
         self.assertEqual(safe.selected_candidate, Baseline.STATIC_NOPF.value)
 
-    def test_matrix_file_is_byte_deterministic(self):
+    def test_p0_contract_blocks_current_non_dominating_runner_output(self):
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "a.csv"
-            second = Path(directory) / "b.csv"
-            run_matrix_file(CONFIG, first)
-            run_matrix_file(CONFIG, second)
-            self.assertEqual(first.read_bytes(), second.read_bytes())
-            self.assertEqual(read_matrix(first), read_matrix(second))
+            with self.assertRaises(TheoreticalContractViolation):
+                run_matrix_file(CONFIG, first)
+            self.assertFalse(first.exists())
 
 
 if __name__ == "__main__":

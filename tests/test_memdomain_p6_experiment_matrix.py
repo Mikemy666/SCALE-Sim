@@ -6,8 +6,10 @@ from pathlib import Path
 from scalesim.memory.memdomain_experiment import (
     Baseline,
     ExperimentRow,
+    TheoreticalContractViolation,
     derive_selected_row,
     read_matrix,
+    validate_theoretical_contract,
     validate_matrix,
     workload_digest,
     write_matrix,
@@ -41,6 +43,59 @@ class MemDomainExperimentMatrixTests(unittest.TestCase):
 
     def test_complete_matrix_passes(self):
         self.assertEqual(len(validate_matrix(self.matrix())), 7)
+        self.assertEqual(len(validate_theoretical_contract(self.matrix())), 7)
+
+    def test_dynamic_no_prefetch_must_dominate_static(self):
+        rows = self.matrix()
+        index = next(i for i, row in enumerate(rows)
+                     if row.baseline == Baseline.DYNAMIC_NOPF.value)
+        rows[index] = self.row(Baseline.DYNAMIC_NOPF, 151)
+        with self.assertRaisesRegex(
+            TheoreticalContractViolation, "Dynamic-NoPF must not exceed"
+        ):
+            validate_theoretical_contract(rows)
+
+    def test_dynamic_naive_prefetch_must_dominate_static_naive(self):
+        rows = self.matrix()
+        index = next(i for i, row in enumerate(rows)
+                     if row.baseline == Baseline.DYNAMIC_NAIVEPF.value)
+        rows[index] = self.row(Baseline.DYNAMIC_NAIVEPF, 161)
+        with self.assertRaisesRegex(
+            TheoreticalContractViolation, "Dynamic-NaivePF must not exceed"
+        ):
+            validate_theoretical_contract(rows)
+
+    def test_naive_prefetch_comparison_requires_identical_workload(self):
+        rows = self.matrix()
+        index = next(i for i, row in enumerate(rows)
+                     if row.baseline == Baseline.DYNAMIC_NAIVEPF.value)
+        rows[index] = replace(rows[index], prefetch_requests=1, prefetch_bytes=4096)
+        with self.assertRaisesRegex(
+            TheoreticalContractViolation, "same prefetch workload"
+        ):
+            validate_theoretical_contract(rows)
+
+    def test_safe_must_dominate_every_implementable_candidate(self):
+        rows = self.matrix()
+        static_pf_index = next(i for i, row in enumerate(rows)
+                               if row.baseline == Baseline.STATIC_NAIVEPF.value)
+        rows[static_pf_index] = self.row(Baseline.STATIC_NAIVEPF, 120)
+        oracle_index = next(i for i, row in enumerate(rows)
+                            if row.baseline == Baseline.ORACLE.value)
+        rows[oracle_index] = derive_selected_row(
+            Baseline.ORACLE,
+            [row for row in rows if row.baseline not in {
+                Baseline.MEMDOMAIN_SAFE.value, Baseline.ORACLE.value
+            }] + [next(row for row in rows
+                      if row.baseline == Baseline.MEMDOMAIN_SAFE.value)],
+            [Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF,
+             Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF,
+             Baseline.MEMDOMAIN_RAW, Baseline.MEMDOMAIN_SAFE],
+        )
+        with self.assertRaisesRegex(
+            TheoreticalContractViolation, "best implementable candidate"
+        ):
+            validate_theoretical_contract(rows)
 
     def test_dynamic_naive_baseline_is_mandatory(self):
         rows = self.matrix()

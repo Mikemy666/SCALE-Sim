@@ -26,6 +26,10 @@ class Baseline(str, Enum):
 REQUIRED_BASELINES = tuple(item.value for item in Baseline)
 
 
+class TheoreticalContractViolation(ValueError):
+    """A measured matrix violates a required MemDomain dominance relation."""
+
+
 @dataclass(frozen=True)
 class ExperimentRow:
     schema_version: int
@@ -194,6 +198,62 @@ def validate_matrix(rows: Iterable[ExperimentRow]) -> Tuple[ExperimentRow, ...]:
     return tuple(sorted(values, key=lambda row: REQUIRED_BASELINES.index(row.baseline)))
 
 
+def validate_theoretical_contract(
+    rows: Iterable[ExperimentRow],
+) -> Tuple[ExperimentRow, ...]:
+    """Enforce the DATE2 design-space containment contract.
+
+    Structural validation remains separate so historical matrices can still be
+    read and diagnosed. Every newly written matrix must additionally pass this
+    function: dynamic placement contains the corresponding static placement,
+    dynamic prefetch uses the same prefetch workload as static prefetch, and
+    the final Safe policy is no worse than any implementable measured baseline.
+    """
+    values = validate_matrix(rows)
+    by_baseline = {row.baseline: row for row in values}
+    static = by_baseline[Baseline.STATIC_NOPF.value]
+    static_pf = by_baseline[Baseline.STATIC_NAIVEPF.value]
+    dynamic = by_baseline[Baseline.DYNAMIC_NOPF.value]
+    dynamic_pf = by_baseline[Baseline.DYNAMIC_NAIVEPF.value]
+    raw = by_baseline[Baseline.MEMDOMAIN_RAW.value]
+    safe = by_baseline[Baseline.MEMDOMAIN_SAFE.value]
+
+    violations = []
+    if dynamic.total_cycles > static.total_cycles:
+        violations.append(
+            "Dynamic-NoPF must not exceed Static-NoPF "
+            f"({dynamic.total_cycles} > {static.total_cycles})"
+        )
+
+    prefetch_identity_fields = ("prefetch_requests", "prefetch_bytes")
+    mismatched = [
+        name for name in prefetch_identity_fields
+        if getattr(dynamic_pf, name) != getattr(static_pf, name)
+    ]
+    if mismatched:
+        violations.append(
+            "Dynamic-NaivePF and Static-NaivePF must issue the same prefetch "
+            f"workload; mismatched fields: {', '.join(mismatched)}"
+        )
+    if dynamic_pf.total_cycles > static_pf.total_cycles:
+        violations.append(
+            "Dynamic-NaivePF must not exceed Static-NaivePF "
+            f"({dynamic_pf.total_cycles} > {static_pf.total_cycles})"
+        )
+
+    implementable = (static, static_pf, dynamic, dynamic_pf, raw)
+    best = min(implementable, key=lambda row: (row.total_cycles, row.baseline))
+    if safe.total_cycles > best.total_cycles:
+        violations.append(
+            "MemDomain-Safe must not exceed the best implementable candidate "
+            f"({safe.total_cycles} > {best.total_cycles}, best={best.baseline})"
+        )
+
+    if violations:
+        raise TheoreticalContractViolation("; ".join(violations))
+    return values
+
+
 def _assert_derived_copy(
     derived: ExperimentRow, selected: ExperimentRow, label: str
 ) -> None:
@@ -211,7 +271,8 @@ def _assert_derived_copy(
 
 
 def write_matrix(path: Path, rows: Iterable[ExperimentRow]) -> None:
-    ordered = validate_matrix(rows)
+    # P0 contract gate: invalid dynamic results must never become paper output.
+    ordered = validate_theoretical_contract(rows)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     field_names = [item.name for item in fields(ExperimentRow)]

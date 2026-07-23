@@ -1,0 +1,108 @@
+{
+  "overall": {
+    "HMoE": {
+      "safe_speedup": 1.5617650347454342,
+      "safe_selected": "Dynamic-NoPF",
+      "conflict_rate": 0.99140625,
+      "memory_stall": 1056664
+    },
+    "Mixtral": {
+      "safe_speedup": 1.475749008954941,
+      "safe_selected": "Dynamic-NoPF",
+      "conflict_rate": 0.9906103286384976,
+      "memory_stall": 832496
+    },
+    "MoDSE": {
+      "safe_speedup": 1.1896568993626977,
+      "safe_selected": "Dynamic-NoPF",
+      "conflict_rate": 0.9824561403508772,
+      "memory_stall": 250066
+    },
+    "Switchtrans": {
+      "safe_speedup": 1.343093873833459,
+      "safe_selected": "Dynamic-NoPF",
+      "conflict_rate": 0.988095238095238,
+      "memory_stall": 515888
+    }
+  },
+  "ablation": {
+    "raw_speedup": 1.1804147104008085,
+    "safe_speedup": 1.1896568993626977,
+    "safe_selected": "Dynamic-NoPF"
+  },
+  "window_chunk": {
+    "best_window": 8,
+    "best_chunk_tiles": 8,
+    "best_raw_cycles": 1482332,
+    "timely_ratio_range": [
+      0.0,
+      0.0
+    ]
+  },
+  "robustness": {
+    "class_HMoE": {
+      "safe_speedup": 1.5617650347454342,
+      "communication_stall": 0
+    },
+    "class_Mixtral": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "ep_1gpu": {
+      "safe_speedup": 1.1896568993626977,
+      "communication_stall": 0
+    },
+    "ep_2gpu": {
+      "safe_speedup": 1.1895667655356839,
+      "communication_stall": 788
+    },
+    "experts_16": {
+      "safe_speedup": 1.8793667015221394,
+      "communication_stall": 0
+    },
+    "experts_4": {
+      "safe_speedup": 1.083869718352477,
+      "communication_stall": 0
+    },
+    "experts_8": {
+      "safe_speedup": 1.3183463547733014,
+      "communication_stall": 0
+    },
+    "routing_balanced": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "routing_high": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "routing_light": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "tokens_128": {
+      "safe_speedup": 1.7469067947202686,
+      "communication_stall": 0
+    },
+    "tokens_256": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "tokens_32": {
+      "safe_speedup": 2.304571898774379,
+      "communication_stall": 0
+    },
+    "tokens_512": {
+      "safe_speedup": 1.2756236446651275,
+      "communication_stall": 0
+    },
+    "topk_1": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "topk_2": {
+      "safe_speedup": 1.2756236446651275,
+      "communication_stall": 0
+    }
+  }
+}

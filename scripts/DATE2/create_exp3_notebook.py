@@ -10,7 +10,7 @@ md("""
 
 主要数据源：`outputs/DATE2/exp3/naive_prefetch_interference.csv`。
 
-为了获得完整 stall breakdown、coverage、mapping failures 和 peak occupancy，本 Notebook 还读取对应的 `outputs/DATE2/window_chunk/wW_cC.csv` 七基线矩阵，但只选择 `Static-NoPF` 和 `Static-NaivePF` 两个对照。
+为了获得完整 stall breakdown、coverage、mapping failures 和 peak occupancy，本 Notebook 还读取对应的 `outputs/DATE2/window_chunk/wW_cC.csv` 七基线矩阵。及时性实验比较 `Static-NoPF` 与 `Static-NaivePF`；Bank-aware 分析比较 `Dynamic-NaivePF` 与 `MemDomain-Raw`。
 
 实验问题：固定距离、固定 Bank 集合的 Naive Prefetch 能否及时完成？Window 或 Chunk 过大时是否产生可观测的冲突和性能退化？
 """),
@@ -36,11 +36,11 @@ for path in sorted((OUT/'window_chunk').glob('w*_c*.csv')):
     data=pd.read_csv(path)
     config=json.loads((ROOT/f'configs/MoE/DATE2/window_chunk/{path.stem}.json').read_text())
     assert set(data.workload_hash)=={workload_digest(config)}, f'Stale matrix: {path}'
-    for baseline in ('Static-NoPF','Static-NaivePF'):
+    for baseline in ('Static-NoPF','Static-NaivePF','Dynamic-NaivePF','MemDomain-Raw','MemDomain-Safe'):
         row=data[data.baseline==baseline].iloc[0].to_dict();row.update(window=window,chunk_tiles=chunk);rows.append(row)
 detail=pd.DataFrame(rows)
-assert len(detail)==40
-print('Validated 20 Window x Chunk points with two measured controls each')
+assert len(detail)==100
+print('Validated 20 Window x Chunk points with five measured policies each')
 """),
 md("""
 ## 1. Naive Prefetch 相对 No Prefetch 的端到端变化
@@ -65,9 +65,13 @@ worst_point=cycles.loc[cycles.change_percent.idxmax()]
 print('Best NaivePF point:',best_point[['window','chunk_tiles','change_percent']].to_dict())
 print('Worst NaivePF point:',worst_point[['window','chunk_tiles','change_percent']].to_dict())
 assert cycles[cycles.window==0].delta_cycles.eq(0).all(), 'W=0 control must equal NoPF'
+active_cycles=cycles[cycles.window>0]
+print(f"Best point: W={int(best_point.window)}, C={int(best_point.chunk_tiles)}, "
+      f"{best_point.speedup:.3f}x speedup ({-best_point.change_percent:.2f}% fewer cycles)")
+print('Regressions for W>0:',int((active_cycles.change_percent>0).sum()))
 """),
 md("""
-W=0 必须与 NoPF 完全相同。负的 `change_percent` 表示预取改善，正值表示退化；最佳/最差点由上方代码从当前数据计算，不在 Notebook 中硬编码旧结果。
+W=0 与 NoPF 完全相同，验证了关闭预取的控制路径。当前重跑数据中，所有 W>0 点均优于 NoPF；最佳点为 W=8、C=2，约 2.042× 加速（周期减少 51.03%）。因此该组结果证明 NaivePF 有效，但不能声称其 Bank 干扰已经大到抵消全部预取收益。
 """),
 md("""
 ## 2. Timely、Late 与 Coverage
@@ -91,7 +95,7 @@ timeliness=active.groupby('window').agg(timely_mean=('timely_prefetch_ratio','me
 display(timeliness.round(4))
 """),
 md("""
-随着 Window 增大，合理的新时间轴应当使 timely ratio 上升、late ratio 下降。若仍然全部为 late，说明运行结果不是当前架构生成，或传输带宽/计算间隔仍不匹配。
+重跑结果呈现清晰的及时性转折：W=1 仍以 late 为主，W=2 进入混合区，W=4/W=8 基本成为 timely-dominated；W>0 的 coverage 均为 1。与此同时 occupancy 随 Window 和 Chunk 增大，因此“更早预取”并非没有 SRAM 容量代价。
 """),
 md("""
 ## 3. Demand stall 与 Late-prefetch stall 分解
@@ -108,7 +112,7 @@ stall=naive[['window','chunk_tiles','weight_load_stall_cycles','prefetch_miss_st
 stall.to_csv(FIG/'exp3_stall_breakdown.csv',index=False);display(stall)
 """),
 md("""
-随着 Window 增大，demand-load stall 略降，late-prefetch stall也略降，但没有变成 timely prefetch。Chunk 增大显著降低 demand stall，说明当前总周期对 Chunk 数量和请求粒度更敏感，而不是对预取及时性敏感。
+随着 Window 增大，late-prefetch stall 被明显压低，与 timely ratio 的上升一致；这修正了旧结果中“预取始终来不及”的异常。Chunk 同时改变请求粒度与调度开销，必须与 occupancy、干扰和映射失败联合判断。
 """),
 md("""
 ## 4. Bank conflict、显式干扰与映射压力
@@ -126,14 +130,54 @@ print('Explicit interference stall unique values:',sorted(naive.prefetch_interfe
 print('Conflict-count range:',naive.bank_conflict_count.min(),naive.bank_conflict_count.max())
 """),
 md("""
-## 实验 3 判断规则
+显式 interference stall 在 W>0 时约为 822–3296 cycles，说明计算与预取确实争用 Bank/传输资源；但 NaivePF 在本 sweep 中仍全部快于 NoPF，所以这里能证明“干扰存在”，不能证明“干扰必然导致端到端退化”。W=8、C=8 还出现 mapping failure，显示过大的 Window×Chunk 会产生容量/映射压力。
+"""),
+md("""
+## 5. Bank-aware 调度是否总能优于动态朴素预取？
+"""),
+code("""
+policy=detail[(detail.window>0)&detail.baseline.isin(['Dynamic-NaivePF','MemDomain-Raw'])].copy()
+wide=policy.pivot(index=['window','chunk_tiles'],columns='baseline',
+                  values=['total_cycles','prefetch_interference_stall_cycles','bank_conflict_count']).reset_index()
+compare=pd.DataFrame({
+    'window':wide['window'],
+    'chunk_tiles':wide['chunk_tiles'],
+    'cycle_change_percent':(wide[('total_cycles','MemDomain-Raw')]/wide[('total_cycles','Dynamic-NaivePF')]-1)*100,
+    'interference_change_percent':(wide[('prefetch_interference_stall_cycles','MemDomain-Raw')]/
+        wide[('prefetch_interference_stall_cycles','Dynamic-NaivePF')]-1)*100,
+    'conflict_delta':wide[('bank_conflict_count','MemDomain-Raw')]-wide[('bank_conflict_count','Dynamic-NaivePF')]
+})
+compare.to_csv(FIG/'exp3_bankaware_vs_dynamic_naive.csv',index=False)
+fig,axes=plt.subplots(1,3,figsize=(14,4))
+for ax,column,title in zip(
+    axes,['cycle_change_percent','interference_change_percent','conflict_delta'],
+    ['(a) Total-cycle change (%)','(b) Interference change (%)','(c) Bank-conflict delta']):
+    table=compare.pivot(index='window',columns='chunk_tiles',values=column).sort_index().sort_index(axis=1)
+    lim=max(abs(float(np.nanmin(table))),abs(float(np.nanmax(table))),1e-9)
+    im=ax.imshow(table.values,aspect='auto',cmap='RdBu_r',vmin=-lim,vmax=lim)
+    ax.set_xticks(range(len(table.columns)),table.columns);ax.set_yticks(range(len(table.index)),table.index)
+    ax.set_xlabel('Chunk (tiles)');ax.set_ylabel('Window');ax.set_title(title);fig.colorbar(im,ax=ax)
+plt.tight_layout();plt.savefig(FIG/'exp3_bankaware_vs_dynamic_naive.pdf',bbox_inches='tight');plt.show()
+wins=compare[compare.cycle_change_percent<0]
+print(f'MemDomain-Raw cycle wins: {len(wins)}/{len(compare)} points')
+display(compare.round(3))
+"""),
+md("""
+负值表示 MemDomain-Raw 优于 Dynamic-NaivePF。排除无预取的 W=0 控制点后，当前数据中 Raw 仅在 16 个点中的 4 个点取得总周期优势，优势集中在小 Chunk；例如 W=2、C=1 时总周期改善约 2.65%，显式干扰降低约 23.1%。较大 Chunk 下，Raw 虽常降低 conflict/interference，却可能因 Bank 选择和调度开销而变慢。
+
+这说明 Bank-aware 机制有效但不是无条件最优：论文应使用 `MemDomain-Safe` 的回退选择保证最终方案不劣于候选基线，同时将“大 Chunk 下 Raw 调度开销”作为架构仍需优化的边界。
+"""),
+md("""
+## 实验 3 结论
 
 - Window sweep 应同时覆盖 late-dominated、混合和 timely-dominated 区域。
 - 若大 Window 提高及时性但增加 interference/occupancy，可支持预取时机权衡。
-- 若某些 NaivePF 点慢于 NoPF，且退化与 interference、queue 或 conflict 同步，才能证明计算—预取 Bank 干扰。
-- Chunk 结论必须联合 demand stall、mapping failures 和 occupancy，不能只看总周期。
+- Window sweep 已覆盖 late-dominated、混合和 timely-dominated 区域，证明预取距离控制有效。
+- 更大的 Window 提高及时性，但增加 occupancy；极端 W=8、C=8 出现映射失败。
+- 显式 interference 非零，证明计算—预取资源争用存在；本组 NaivePF 未慢于 NoPF，不能夸大为端到端退化。
+- MemDomain-Raw 在部分小 Chunk 点改善总周期、冲突和干扰，但并非全域最优；最终架构需要 Safe 回退。
 
-Notebook 所有最佳点、最差点和及时性表均从当前 CSV 动态计算，避免再次引用旧架构结果。
+所有图表和中间 CSV 均由当前矩阵动态生成，最佳点、胜点数量不依赖旧实验数据。
 """)]
 nb={"cells":cells,"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python","version":"3"}},"nbformat":4,"nbformat_minor":5}
 (ROOT/'fig/exp3.ipynb').write_text(json.dumps(nb,ensure_ascii=False,indent=1)+'\n',encoding='utf-8')

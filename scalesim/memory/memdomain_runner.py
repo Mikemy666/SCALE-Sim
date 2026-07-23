@@ -127,6 +127,28 @@ def _compute_pressure(
     }
 
 
+def _pressure_snapshot(report, cycle: int, bank_count: int, horizon: int = 64):
+    """Time-local pressure visible to an online prefetch decision.
+
+    Aggregate whole-run busy/conflict counts made every Bank permanently hot
+    and caused Bank-aware prefetch to cancel all requests.  This snapshot uses
+    only compute services overlapping the decision horizon.
+    """
+    end = cycle + horizon
+    result = {}
+    for bank in range(bank_count):
+        active = [service for service in report.services
+                  if bank in service.banks and service.issue_cycle < end
+                  and service.completion_cycle > cycle]
+        result[bank] = BankPressure(
+            queue_depth=len(active),
+            busy_cycles=sum(max(0, min(end, item.completion_cycle) -
+                                max(cycle, item.start_cycle)) for item in active),
+            conflicts=sum(item.queue_wait_cycles > 0 for item in active),
+        )
+    return result
+
+
 def _bank_metrics(report) -> Mapping[str, float]:
     accesses = list(report.per_bank_accesses.values())
     busy = list(report.per_bank_busy_cycles.values())
@@ -177,6 +199,7 @@ def _decisions(
     config: RunnerConfig,
     manager: ChunkResidencyManager,
     pressure: Mapping[int, BankPressure],
+    compute_report=None,
 ) -> Tuple[PrefetchDecision, ...]:
     if baseline in (Baseline.STATIC_NOPF, Baseline.DYNAMIC_NOPF):
         return tuple(NoPrefetchPolicy().decide(chunk) for chunk in config.chunks)
@@ -208,7 +231,10 @@ def _decisions(
         trigger_index = index - config.prefetch_window
         issue = 0 if trigger_index < 0 else ordered_chunks[trigger_index].use_cycle
         while True:
-            snapshot = BankSnapshot(issue, pressure, free)
+            local_pressure = (_pressure_snapshot(
+                compute_report, issue, config.resources.bank_count
+            ) if compute_report is not None else pressure)
+            snapshot = BankSnapshot(issue, local_pressure, free)
             estimate = max(1, int(
                 (chunk.size_bytes + config.resources.bandwidth_bytes_per_cycle - 1)
                 // config.resources.bandwidth_bytes_per_cycle
@@ -244,8 +270,15 @@ def run_raw_baseline_with_details(
     # Policy planning reads this mapping's capacity view; P9 owns execution.
     manager = ChunkResidencyManager(mapping)
     domain = UnifiedBankDomain(config.resources, config.interleave_bytes)
-    pressure = _compute_pressure(config, domain)
-    decisions = _decisions(baseline, config, manager, pressure)
+    compute_only = domain.simulate(config.compute_requests)
+    pressure = {
+        bank: BankPressure(
+            queue_depth=compute_only.per_bank_max_queue_depth[bank],
+            busy_cycles=compute_only.per_bank_busy_cycles[bank],
+            conflicts=compute_only.per_bank_conflicts[bank],
+        ) for bank in range(config.resources.bank_count)
+    }
+    decisions = _decisions(baseline, config, manager, pressure, compute_only)
     by_chunk = {chunk.chunk_id: chunk for chunk in config.chunks}
     plans = []
     for decision in decisions:
@@ -262,7 +295,6 @@ def run_raw_baseline_with_details(
                 chunk, chunk.use_cycle, "demand", preferred,
             ))
 
-    compute_only = domain.simulate(config.compute_requests)
     residency = StreamingResidencyEngine(domain, mapping).run(
         plans, config.compute_requests, pressure
     )

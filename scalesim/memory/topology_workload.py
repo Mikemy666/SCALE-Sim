@@ -59,14 +59,53 @@ def generate_topology_runner_payload(
         raise ValueError("expert assignments must be divisible by Top-K")
     total_tokens = sum(token_counts) // top_k
 
+    # Schedule weight use from the analytical work of the owning FFN stage.
+    # The old fixed +8-cycle spacing made a 16 KiB transfer physically unable
+    # to meet any paper Window and forced every prefetch to be late.
+    array_macs_per_cycle = 64 * 64
+    non_expert_cycles = sum(
+        max(1, (m * n * k + array_macs_per_cycle - 1) // array_macs_per_cycle)
+        for name, m, n, k in topology["layers"] if not EXPERT_LAYER.fullmatch(name)
+    )
     chunks = []
+    stage_requests = []
     address = 0
-    use_cycle = 32
+    use_cycle = non_expert_cycles + 32
     for expert in topology["expert_ids"]:
         for part in (1, 2):
-            _, n, k = experts[(expert, part)]
+            m, n, k = experts[(expert, part)]
             raw_weight_bytes = n * k * precision_bytes
-            remaining = (raw_weight_bytes + weight_scale_divisor - 1) // weight_scale_divisor
+            scaled_weight_bytes = (raw_weight_bytes + weight_scale_divisor - 1) // weight_scale_divisor
+            chunk_count = max(1, (scaled_weight_bytes + chunk_size_bytes - 1) // chunk_size_bytes)
+            stage_cycles = max(
+                1, (m * n * k + array_macs_per_cycle - 1) // array_macs_per_cycle
+            )
+            tile_spacing = max(1, stage_cycles // chunk_count)
+            stage_start = use_cycle
+            ia_start = (expert * 3 + (part - 1) * 5) % 24
+            oa_start = (ia_start + 10) % 24
+            stage_requests.extend((
+                {
+                    "request_id": f"compute_e{expert}_ff{part}_ia",
+                    "issue_cycle": stage_start,
+                    "tensor_type": "ia", "object_id": f"ia_e{expert}_ff{part}",
+                    "address": expert * 4096 + part * 1024,
+                    "size_bytes": max(1024, m * k * precision_bytes),
+                    "kind": "read",
+                    "preferred_banks": [(ia_start + offset) % 24 for offset in range(8)],
+                },
+                {
+                    "request_id": f"compute_e{expert}_ff{part}_oa",
+                    "issue_cycle": stage_start + stage_cycles // 2,
+                    "tensor_type": "accumulator",
+                    "object_id": f"oa_e{expert}_ff{part}",
+                    "address": expert * 4096 + part * 1024,
+                    "size_bytes": max(1024, m * n * precision_bytes),
+                    "kind": "write",
+                    "preferred_banks": [(oa_start + offset) % 24 for offset in range(8)],
+                },
+            ))
+            remaining = scaled_weight_bytes
             tile = 0
             while remaining:
                 size = min(chunk_size_bytes, remaining)
@@ -76,19 +115,16 @@ def generate_topology_runner_payload(
                     "ffn_part": part,
                     "tile_id": tile,
                     "size_bytes": size,
-                    "use_cycle": use_cycle,
+                    "use_cycle": stage_start + (tile + 1) * tile_spacing,
                     "logical_address": address,
                     "bank_group_size": max(1, (size + 64 * 1024 - 1) // (64 * 1024)),
                 })
                 remaining -= size
                 address += size
-                use_cycle += 8
                 tile += 1
+            use_cycle = stage_start + stage_cycles
 
-    # The analytical compute envelope is deterministic and common across all
-    # baseline policies; P10 compares memory behavior under the same envelope.
-    macs = sum(m * n * k for _, m, n, k in topology["layers"])
-    compute_cycles = max(use_cycle + 32, (macs + 255) // 256)
+    compute_cycles = use_cycle + 32
     name = Path(path).stem
     return {
         "experiment_id": f"p10-overall-{name.lower()}",
@@ -133,12 +169,9 @@ def generate_topology_runner_payload(
         },
         "chunks": chunks,
         "compute_requests": [
-            {"request_id": "compute_ia", "issue_cycle": 0, "tensor_type": "ia",
+            {"request_id": "compute_frontend_ia", "issue_cycle": 0, "tensor_type": "ia",
              "object_id": "ia", "address": 0, "size_bytes": 256 * 384 * precision_bytes,
              "kind": "read", "preferred_banks": list(range(8))},
-            {"request_id": "compute_accumulator", "issue_cycle": compute_cycles // 2,
-             "tensor_type": "accumulator", "object_id": "accumulator", "address": 0,
-             "size_bytes": 256 * 384 * precision_bytes, "kind": "write",
-             "preferred_banks": list(range(16, 24))},
+            *stage_requests,
         ],
     }

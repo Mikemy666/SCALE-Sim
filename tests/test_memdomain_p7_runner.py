@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scalesim.memory.memdomain_experiment import (
     Baseline,
-    TheoreticalContractViolation,
+    read_matrix,
 )
 from scalesim.memory.memdomain_runner import (
     load_runner_config,
@@ -54,19 +54,39 @@ class MemDomainRunnerTests(unittest.TestCase):
         self.assertLessEqual(rows[Baseline.MEMDOMAIN_SAFE.value].total_cycles, static)
         self.assertLessEqual(rows[Baseline.ORACLE.value].total_cycles, static)
 
+    def test_dynamic_search_contains_matched_static_incumbent(self):
+        rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}
+        self.assertLessEqual(
+            rows[Baseline.DYNAMIC_NOPF.value].total_cycles,
+            rows[Baseline.STATIC_NOPF.value].total_cycles,
+        )
+        self.assertLessEqual(
+            rows[Baseline.DYNAMIC_NAIVEPF.value].total_cycles,
+            rows[Baseline.STATIC_NAIVEPF.value].total_cycles,
+        )
+
+    def test_matched_naive_prefetch_work_is_identical(self):
+        rows = {row.baseline: row for row in run_matrix(load_runner_config(CONFIG))}
+        static = rows[Baseline.STATIC_NAIVEPF.value]
+        dynamic = rows[Baseline.DYNAMIC_NAIVEPF.value]
+        self.assertEqual(static.prefetch_requests, dynamic.prefetch_requests)
+        self.assertEqual(static.prefetch_bytes, dynamic.prefetch_bytes)
+
     def test_large_mapping_overhead_triggers_safe_fallback(self):
         config = replace(load_runner_config(CONFIG), mapping_overhead_per_object=1000)
         rows = {row.baseline: row for row in run_matrix(config)}
         safe = rows[Baseline.MEMDOMAIN_SAFE.value]
         self.assertTrue(safe.fallback_used)
-        self.assertEqual(safe.selected_candidate, Baseline.STATIC_NOPF.value)
+        self.assertEqual(safe.selected_candidate, Baseline.DYNAMIC_NAIVEPF.value)
 
-    def test_p0_contract_blocks_current_non_dominating_runner_output(self):
+    def test_matrix_file_is_byte_deterministic_after_p1_p2(self):
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "a.csv"
-            with self.assertRaises(TheoreticalContractViolation):
-                run_matrix_file(CONFIG, first)
-            self.assertFalse(first.exists())
+            second = Path(directory) / "b.csv"
+            run_matrix_file(CONFIG, first)
+            run_matrix_file(CONFIG, second)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(read_matrix(first), read_matrix(second))
 
 
 if __name__ == "__main__":

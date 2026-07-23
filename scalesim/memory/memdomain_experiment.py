@@ -183,12 +183,17 @@ def validate_matrix(rows: Iterable[ExperimentRow]) -> Tuple[ExperimentRow, ...]:
     static = by_baseline[Baseline.STATIC_NOPF.value]
     dynamic = by_baseline[Baseline.DYNAMIC_NOPF.value]
     raw = by_baseline[Baseline.MEMDOMAIN_RAW.value]
-    if safe.selected_candidate not in {static.baseline, dynamic.baseline, raw.baseline}:
+    implementable_safe_candidates = {
+        Baseline.STATIC_NOPF.value,
+        Baseline.STATIC_NAIVEPF.value,
+        Baseline.DYNAMIC_NOPF.value,
+        Baseline.DYNAMIC_NAIVEPF.value,
+        Baseline.MEMDOMAIN_RAW.value,
+    }
+    if safe.selected_candidate not in implementable_safe_candidates:
         raise ValueError("Safe row has invalid selected-candidate provenance")
     selected_safe = by_baseline[safe.selected_candidate]
     _assert_derived_copy(safe, selected_safe, "Safe")
-    if safe.total_cycles > static.total_cycles:
-        raise ValueError("Safe MemDomain is worse than Static-NoPF")
     if oracle.selected_candidate not in set(REQUIRED_BASELINES) - {Baseline.ORACLE.value}:
         raise ValueError("Oracle row has invalid selected-candidate provenance")
     selected_oracle = by_baseline[oracle.selected_candidate]

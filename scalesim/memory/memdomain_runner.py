@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import sqrt
 from pathlib import Path
 from typing import Mapping, Sequence, Tuple
@@ -377,6 +377,12 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
 def run_best_static_baseline(
     config: RunnerConfig, baseline: Baseline
 ) -> ExperimentRow:
+    return run_best_static_baseline_with_details(config, baseline).row
+
+
+def run_best_static_baseline_with_details(
+    config: RunnerConfig, baseline: Baseline
+) -> RawBaselineExecution:
     if baseline not in (Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF):
         raise ValueError("static search accepts only static baselines")
     width = len(config.static_weight_banks)
@@ -406,31 +412,103 @@ def run_best_static_baseline(
             compute_requests=config.compute_requests,
             payload=config.payload,
         )
-        candidates.append((run_raw_baseline(candidate_config, baseline), group))
+        candidates.append((
+            run_raw_baseline_with_details(candidate_config, baseline), group
+        ))
     selected, group = min(
-        candidates, key=lambda item: (item[0].total_cycles, item[1])
+        candidates, key=lambda item: (item[0].row.total_cycles, item[1])
     )
-    from dataclasses import replace
-    return replace(
-        selected,
-        candidate_source="exhaustive_cyclic_static_weight_groups:" + ":".join(map(str, group)),
+    return RawBaselineExecution(
+        replace(
+            selected.row,
+            candidate_source=(
+                "exhaustive_cyclic_static_weight_groups:"
+                + ":".join(map(str, group))
+            ),
+        ),
+        selected.chunks,
+        selected.memory_report,
     )
+
+
+def run_dominating_dynamic_baseline_with_details(
+    config: RunnerConfig,
+    baseline: Baseline,
+    static_incumbent: RawBaselineExecution,
+) -> RawBaselineExecution:
+    """Evaluate dynamic placement with the matched static optimum as incumbent.
+
+    Keeping the incumbent in the feasible set is the P1 containment property:
+    a dynamic mapping is committed only if its measured end-to-end objective is
+    no larger. Otherwise the address translator preserves the static mapping.
+    """
+    matched = {
+        Baseline.DYNAMIC_NOPF: Baseline.STATIC_NOPF,
+        Baseline.DYNAMIC_NAIVEPF: Baseline.STATIC_NAIVEPF,
+    }
+    if baseline not in matched or static_incumbent.row.baseline != matched[baseline].value:
+        raise ValueError("dynamic baseline requires its matched static incumbent")
+    candidate = run_raw_baseline_with_details(config, baseline)
+    if candidate.row.total_cycles <= static_incumbent.row.total_cycles:
+        return candidate
+    return RawBaselineExecution(
+        replace(
+            static_incumbent.row,
+            baseline=baseline.value,
+            candidate_source=(
+                "incumbent_static_mapping|" + static_incumbent.row.candidate_source
+            ),
+        ),
+        static_incumbent.chunks,
+        static_incumbent.memory_report,
+    )
+
+
+def _assert_matched_naive_prefetch_plans(
+    static: RawBaselineExecution, dynamic: RawBaselineExecution
+) -> None:
+    """P2 fairness: placement may differ; the planned prefetch work may not."""
+    def plan(execution):
+        return tuple(sorted(
+            (item.chunk_id, item.planned_kind, item.planned_issue_cycle)
+            for item in execution.chunks
+        ))
+    if plan(static) != plan(dynamic):
+        raise AssertionError(
+            "Static-NaivePF and Dynamic-NaivePF use different prefetch plans"
+        )
+    if (
+        static.row.prefetch_requests != dynamic.row.prefetch_requests
+        or static.row.prefetch_bytes != dynamic.row.prefetch_bytes
+    ):
+        raise AssertionError(
+            "Static-NaivePF and Dynamic-NaivePF use different prefetch workloads"
+        )
 
 
 def run_matrix(config: RunnerConfig) -> Tuple[ExperimentRow, ...]:
+    static = run_best_static_baseline_with_details(config, Baseline.STATIC_NOPF)
+    static_pf = run_best_static_baseline_with_details(
+        config, Baseline.STATIC_NAIVEPF
+    )
+    dynamic = run_dominating_dynamic_baseline_with_details(
+        config, Baseline.DYNAMIC_NOPF, static
+    )
+    dynamic_pf = run_dominating_dynamic_baseline_with_details(
+        config, Baseline.DYNAMIC_NAIVEPF, static_pf
+    )
+    _assert_matched_naive_prefetch_plans(static_pf, dynamic_pf)
+    raw_execution = run_raw_baseline_with_details(config, Baseline.MEMDOMAIN_RAW)
     raw = [
-        run_best_static_baseline(config, Baseline.STATIC_NOPF),
-        run_best_static_baseline(config, Baseline.STATIC_NAIVEPF),
-        run_raw_baseline(config, Baseline.DYNAMIC_NOPF),
-        run_raw_baseline(config, Baseline.DYNAMIC_NAIVEPF),
-        run_raw_baseline(config, Baseline.MEMDOMAIN_RAW),
+        static.row, static_pf.row, dynamic.row, dynamic_pf.row, raw_execution.row,
     ]
     by_name = {row.baseline: row for row in raw}
     safe = derive_selected_row(
         Baseline.MEMDOMAIN_SAFE,
-        [by_name[Baseline.STATIC_NOPF.value], by_name[Baseline.DYNAMIC_NOPF.value],
-         by_name[Baseline.MEMDOMAIN_RAW.value]],
-        [Baseline.STATIC_NOPF, Baseline.DYNAMIC_NOPF, Baseline.MEMDOMAIN_RAW],
+        raw,
+        [Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF,
+         Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF,
+         Baseline.MEMDOMAIN_RAW],
     )
     oracle = derive_selected_row(
         Baseline.ORACLE, [*raw, safe],

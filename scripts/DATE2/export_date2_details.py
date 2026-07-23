@@ -2,12 +2,16 @@
 from __future__ import annotations
 import csv, json, sys
 from collections import defaultdict
-from dataclasses import replace
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 from scalesim.memory.memdomain_experiment import Baseline
-from scalesim.memory.memdomain_runner import load_runner_config, run_best_static_baseline, run_raw_baseline_with_details
+from scalesim.memory.memdomain_runner import (
+    load_runner_config,
+    run_best_static_baseline_with_details,
+    run_dominating_dynamic_baseline_with_details,
+    run_raw_baseline_with_details,
+)
 
 RAW=(Baseline.STATIC_NOPF,Baseline.STATIC_NAIVEPF,Baseline.DYNAMIC_NOPF,Baseline.DYNAMIC_NAIVEPF,Baseline.MEMDOMAIN_RAW)
 
@@ -17,17 +21,23 @@ def write(path,rows):
     with path.open("w",newline="",encoding="utf-8") as f:
         w=csv.DictWriter(f,fieldnames=tuple(rows[0]));w.writeheader();w.writerows(rows)
 
-def static_config(config,baseline):
-    selected=run_best_static_baseline(config,baseline)
-    group=tuple(map(int,selected.candidate_source.split(":")[1:]))
-    return replace(config,static_weight_banks=group)
-
 def export(config_path,output_dir):
     config=load_runner_config(Path(config_path)); output_dir=Path(output_dir); by_chunk={c.chunk_id:c for c in config.chunks}
     chunk_rows=[];bank_rows=[];request_rows=[];layer_acc=defaultdict(lambda:defaultdict(int));expert_acc=defaultdict(lambda:defaultdict(int)); selections=[]
+    static_results={
+        Baseline.STATIC_NOPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NOPF),
+        Baseline.STATIC_NAIVEPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NAIVEPF),
+    }
     for baseline in RAW:
-        active=static_config(config,baseline) if baseline in (Baseline.STATIC_NOPF,Baseline.STATIC_NAIVEPF) else config
-        result=run_raw_baseline_with_details(active,baseline); selections.append({"baseline":baseline.value,"total_cycles":result.row.total_cycles,"candidate_source":result.row.candidate_source})
+        if baseline in static_results:
+            result=static_results[baseline]
+        elif baseline==Baseline.DYNAMIC_NOPF:
+            result=run_dominating_dynamic_baseline_with_details(config,baseline,static_results[Baseline.STATIC_NOPF])
+        elif baseline==Baseline.DYNAMIC_NAIVEPF:
+            result=run_dominating_dynamic_baseline_with_details(config,baseline,static_results[Baseline.STATIC_NAIVEPF])
+        else:
+            result=run_raw_baseline_with_details(config,baseline)
+        selections.append({"baseline":baseline.value,"total_cycles":result.row.total_cycles,"candidate_source":result.row.candidate_source})
         services={s.request_id:s for s in result.memory_report.services}
         for item in result.chunks:
             chunk=by_chunk[item.chunk_id]; service=services[f"load:{item.chunk_id}"]

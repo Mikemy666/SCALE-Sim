@@ -608,7 +608,7 @@ def run_dominating_dynamic_baseline_with_details(
     if baseline not in matched or static_incumbent.row.baseline != matched[baseline].value:
         raise ValueError("dynamic baseline requires its matched static incumbent")
     candidate = run_raw_baseline_with_details(config, baseline)
-    if candidate.row.total_cycles <= static_incumbent.row.total_cycles:
+    if candidate.row.total_cycles < static_incumbent.row.total_cycles:
         return candidate
     return RawBaselineExecution(
         replace(

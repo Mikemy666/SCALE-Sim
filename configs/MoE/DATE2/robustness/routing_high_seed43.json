@@ -1,0 +1,2031 @@
+{
+  "chunks": [
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c0",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 0,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 32
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c1",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 16384,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 40
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c2",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 32768,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 48
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c3",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 49152,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 56
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c4",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 65536,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 64
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c5",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 81920,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 72
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c6",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 98304,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 80
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c7",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 114688,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 88
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c8",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 131072,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 96
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c9",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 147456,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 104
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c10",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 163840,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 112
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c11",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 180224,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 120
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c12",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 196608,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 128
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c13",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 212992,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 136
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c14",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 229376,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 144
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff1_c15",
+      "expert_id": 0,
+      "ffn_part": 1,
+      "logical_address": 245760,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 152
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c0",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 258048,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 160
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c1",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 274432,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 168
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c2",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 290816,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 176
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c3",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 307200,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 184
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c4",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 323584,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 192
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c5",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 339968,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 200
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c6",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 356352,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 208
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e0_ff2_c7",
+      "expert_id": 0,
+      "ffn_part": 2,
+      "logical_address": 372736,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 216
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c0",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 387072,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 224
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c1",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 403456,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 232
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c2",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 419840,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 240
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c3",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 436224,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 248
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c4",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 452608,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 256
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c5",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 468992,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 264
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c6",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 485376,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 272
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c7",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 501760,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 280
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c8",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 518144,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 288
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c9",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 534528,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 296
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c10",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 550912,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 304
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c11",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 567296,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 312
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c12",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 583680,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 320
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c13",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 600064,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 328
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c14",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 616448,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 336
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff1_c15",
+      "expert_id": 1,
+      "ffn_part": 1,
+      "logical_address": 632832,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 344
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c0",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 645120,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 352
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c1",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 661504,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 360
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c2",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 677888,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 368
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c3",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 694272,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 376
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c4",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 710656,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 384
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c5",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 727040,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 392
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c6",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 743424,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 400
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e1_ff2_c7",
+      "expert_id": 1,
+      "ffn_part": 2,
+      "logical_address": 759808,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 408
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c0",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 774144,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 416
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c1",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 790528,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 424
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c2",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 806912,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 432
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c3",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 823296,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 440
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c4",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 839680,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 448
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c5",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 856064,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 456
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c6",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 872448,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 464
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c7",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 888832,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 472
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c8",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 905216,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 480
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c9",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 921600,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 488
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c10",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 937984,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 496
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c11",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 954368,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 504
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c12",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 970752,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 512
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c13",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 987136,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 520
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c14",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 1003520,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 528
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff1_c15",
+      "expert_id": 2,
+      "ffn_part": 1,
+      "logical_address": 1019904,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 536
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c0",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1032192,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 544
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c1",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1048576,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 552
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c2",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1064960,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 560
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c3",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1081344,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 568
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c4",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1097728,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 576
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c5",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1114112,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 584
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c6",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1130496,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 592
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e2_ff2_c7",
+      "expert_id": 2,
+      "ffn_part": 2,
+      "logical_address": 1146880,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 600
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c0",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1161216,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 608
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c1",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1177600,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 616
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c2",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1193984,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 624
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c3",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1210368,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 632
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c4",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1226752,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 640
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c5",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1243136,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 648
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c6",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1259520,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 656
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c7",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1275904,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 664
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c8",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1292288,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 672
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c9",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1308672,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 680
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c10",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1325056,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 688
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c11",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1341440,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 696
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c12",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1357824,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 704
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c13",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1374208,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 712
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c14",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1390592,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 720
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff1_c15",
+      "expert_id": 3,
+      "ffn_part": 1,
+      "logical_address": 1406976,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 728
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c0",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1419264,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 736
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c1",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1435648,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 744
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c2",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1452032,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 752
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c3",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1468416,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 760
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c4",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1484800,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 768
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c5",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1501184,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 776
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c6",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1517568,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 784
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e3_ff2_c7",
+      "expert_id": 3,
+      "ffn_part": 2,
+      "logical_address": 1533952,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 792
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c0",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1548288,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 800
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c1",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1564672,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 808
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c2",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1581056,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 816
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c3",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1597440,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 824
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c4",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1613824,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 832
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c5",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1630208,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 840
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c6",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1646592,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 848
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c7",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1662976,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 856
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c8",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1679360,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 864
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c9",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1695744,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 872
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c10",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1712128,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 880
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c11",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1728512,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 888
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c12",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1744896,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 896
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c13",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1761280,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 904
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c14",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1777664,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 912
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff1_c15",
+      "expert_id": 4,
+      "ffn_part": 1,
+      "logical_address": 1794048,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 920
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c0",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1806336,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 928
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c1",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1822720,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 936
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c2",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1839104,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 944
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c3",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1855488,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 952
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c4",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1871872,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 960
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c5",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1888256,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 968
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c6",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1904640,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 976
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e4_ff2_c7",
+      "expert_id": 4,
+      "ffn_part": 2,
+      "logical_address": 1921024,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 984
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c0",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 1935360,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 992
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c1",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 1951744,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1000
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c2",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 1968128,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1008
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c3",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 1984512,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1016
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c4",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2000896,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1024
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c5",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2017280,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1032
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c6",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2033664,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1040
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c7",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2050048,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 1048
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c8",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2066432,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 1056
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c9",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2082816,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 1064
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c10",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2099200,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 1072
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c11",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2115584,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 1080
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c12",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2131968,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 1088
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c13",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2148352,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 1096
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c14",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2164736,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 1104
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff1_c15",
+      "expert_id": 5,
+      "ffn_part": 1,
+      "logical_address": 2181120,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 1112
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c0",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2193408,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 1120
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c1",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2209792,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1128
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c2",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2226176,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1136
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c3",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2242560,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1144
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c4",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2258944,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1152
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c5",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2275328,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1160
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c6",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2291712,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1168
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e5_ff2_c7",
+      "expert_id": 5,
+      "ffn_part": 2,
+      "logical_address": 2308096,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 1176
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c0",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2322432,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 1184
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c1",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2338816,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1192
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c2",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2355200,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1200
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c3",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2371584,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1208
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c4",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2387968,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1216
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c5",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2404352,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1224
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c6",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2420736,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1232
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c7",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2437120,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 1240
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c8",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2453504,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 1248
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c9",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2469888,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 1256
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c10",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2486272,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 1264
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c11",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2502656,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 1272
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c12",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2519040,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 1280
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c13",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2535424,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 1288
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c14",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2551808,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 1296
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff1_c15",
+      "expert_id": 6,
+      "ffn_part": 1,
+      "logical_address": 2568192,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 1304
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c0",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2580480,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 1312
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c1",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2596864,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1320
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c2",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2613248,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1328
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c3",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2629632,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1336
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c4",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2646016,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1344
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c5",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2662400,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1352
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c6",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2678784,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1360
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e6_ff2_c7",
+      "expert_id": 6,
+      "ffn_part": 2,
+      "logical_address": 2695168,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 1368
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c0",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2709504,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 1376
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c1",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2725888,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1384
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c2",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2742272,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1392
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c3",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2758656,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1400
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c4",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2775040,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1408
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c5",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2791424,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1416
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c6",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2807808,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1424
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c7",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2824192,
+      "size_bytes": 16384,
+      "tile_id": 7,
+      "use_cycle": 1432
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c8",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2840576,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 1440
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c9",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2856960,
+      "size_bytes": 16384,
+      "tile_id": 9,
+      "use_cycle": 1448
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c10",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2873344,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 1456
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c11",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2889728,
+      "size_bytes": 16384,
+      "tile_id": 11,
+      "use_cycle": 1464
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c12",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2906112,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 1472
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c13",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2922496,
+      "size_bytes": 16384,
+      "tile_id": 13,
+      "use_cycle": 1480
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c14",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2938880,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 1488
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff1_c15",
+      "expert_id": 7,
+      "ffn_part": 1,
+      "logical_address": 2955264,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 1496
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c0",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 2967552,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 1504
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c1",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 2983936,
+      "size_bytes": 16384,
+      "tile_id": 1,
+      "use_cycle": 1512
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c2",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3000320,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 1520
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c3",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3016704,
+      "size_bytes": 16384,
+      "tile_id": 3,
+      "use_cycle": 1528
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c4",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3033088,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 1536
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c5",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3049472,
+      "size_bytes": 16384,
+      "tile_id": 5,
+      "use_cycle": 1544
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c6",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3065856,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 1552
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "e7_ff2_c7",
+      "expert_id": 7,
+      "ffn_part": 2,
+      "logical_address": 3082240,
+      "size_bytes": 14336,
+      "tile_id": 7,
+      "use_cycle": 1560
+    }
+  ],
+  "compute_cycles": 2206720,
+  "compute_intervals": [
+    [
+      0,
+      2206720
+    ]
+  ],
+  "compute_requests": [
+    {
+      "address": 0,
+      "issue_cycle": 0,
+      "kind": "read",
+      "object_id": "ia",
+      "preferred_banks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "request_id": "compute_ia",
+      "size_bytes": 196608,
+      "tensor_type": "ia"
+    },
+    {
+      "address": 0,
+      "issue_cycle": 1103360,
+      "kind": "write",
+      "object_id": "accumulator",
+      "preferred_banks": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "request_id": "compute_accumulator",
+      "size_bytes": 196608,
+      "tensor_type": "accumulator"
+    }
+  ],
+  "date2_suite": "robustness",
+  "date2_variant": "routing_high_seed43",
+  "experiment_id": "date2-robustness-routing_high_seed43",
+  "hardware": {
+    "bandwidth_bytes_per_cycle": 384,
+    "bank_count": 24,
+    "capacity_bytes": 1572864,
+    "interleave_bytes": 1024,
+    "ports_per_bank": 1,
+    "request_buffer_depth": 32
+  },
+  "policy": {
+    "busy_threshold": 32,
+    "conflict_threshold": 4,
+    "mapping_overhead_per_object": 1,
+    "prefetch_window": 2,
+    "queue_threshold": 2,
+    "static_weight_banks": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "system": {
+    "communication_bandwidth_bytes_per_cycle": 128,
+    "communication_latency_cycles": 20,
+    "num_gpus": 1,
+    "remote_token_fraction": 0.0,
+    "token_payload_bytes": 768
+  },
+  "topology_provenance": {
+    "chunk_size_bytes": 16384,
+    "model_class": "homogeneous",
+    "paper_scale_performance_claim": false,
+    "precision_bytes": 2,
+    "routing_mode": "topology_counts",
+    "routing_seed": 43,
+    "routing_severity": "high",
+    "source_path": "/home/MikeNotFound/code/SCALE-Sim/topologies/MoE/DATE2/robustness/routing_high_seed43.csv",
+    "streaming_fixed_capacity": true,
+    "token_counts": [
+      125,
+      54,
+      30,
+      17,
+      5,
+      8,
+      10,
+      7
+    ],
+    "top_k": 1,
+    "total_tokens": 256,
+    "weight_scale_divisor": 8
+  },
+  "workload_name": "routing_high_seed43"
+}

@@ -9,6 +9,7 @@
     "overall": 4,
     "ablation": 1,
     "window_chunk": 20,
-    "robustness": 16
+    "robustness": 26,
+    "characterization": 3
   }
 }

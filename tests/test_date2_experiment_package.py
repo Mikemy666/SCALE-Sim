@@ -12,13 +12,15 @@ class Date2PackageTests(unittest.TestCase):
 
     def test_manifest_covers_all_paper_simulator_sweeps(self):
         manifest=json.loads((ROOT/"configs/MoE/DATE2/manifest.json").read_text())
-        self.assertEqual(manifest["suites"],{"overall":4,"ablation":1,"window_chunk":20,"robustness":16})
+        self.assertEqual(manifest["suites"],{"overall":4,"ablation":1,"window_chunk":20,"robustness":26,"characterization":3})
         self.assertTrue(manifest["simulator_only"]); self.assertTrue(manifest["rtl_dc_out_of_scope"])
 
     def test_every_config_parses_and_paths_exist(self):
         configs=list((ROOT/"configs/MoE/DATE2").glob("*/*.json"))
-        self.assertEqual(len(configs),41)
-        for path in configs: self.assertGreater(len(load_runner_config(path).chunks),0)
+        self.assertEqual(len(configs),54)
+        for path in configs:
+            if path.parent.name not in {"exp1","exp2","exp3"}:
+                self.assertGreater(len(load_runner_config(path).chunks),0)
         self.assertEqual(len(list((ROOT/"topologies/MoE/DATE2/models").glob("*.csv"))),4)
 
     def test_ep_model_is_zero_for_one_gpu_and_nonzero_for_two(self):

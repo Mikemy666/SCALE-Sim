@@ -1,0 +1,9 @@
+{
+  "purpose": "B1_C1_layer_and_flow_characterization",
+  "topology": "topologies/MoE/DATE2/exp1/MoDSE.csv",
+  "static_banks": [
+    8,
+    8,
+    8
+  ]
+}

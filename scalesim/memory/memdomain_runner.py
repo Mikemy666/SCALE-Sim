@@ -18,7 +18,9 @@ from scalesim.memory.memdomain_experiment import (
     write_matrix,
 )
 from scalesim.memory.memdomain_policy import ResourceBudget
-from scalesim.memory.streaming_residency import StreamingLoadPlan, StreamingResidencyEngine
+from scalesim.memory.streaming_residency import (
+    StreamingChunkResult, StreamingLoadPlan, StreamingResidencyEngine,
+)
 from scalesim.memory.prefetch_policy import (
     BankAwarePrefetchPolicy,
     BankSnapshot,
@@ -27,7 +29,9 @@ from scalesim.memory.prefetch_policy import (
     PrefetchAction,
     PrefetchDecision,
 )
-from scalesim.memory.unified_bank_domain import UnifiedBankDomain, UnifiedMemoryRequest
+from scalesim.memory.unified_bank_domain import (
+    UnifiedBankDomain, UnifiedDomainReport, UnifiedMemoryRequest,
+)
 from scalesim.memory.virtual_bank_mapping import (
     BankPressure,
     VirtualBankMappingTable,
@@ -51,6 +55,14 @@ class RunnerConfig:
     chunks: Tuple[WeightChunk, ...]
     compute_requests: Tuple[UnifiedMemoryRequest, ...]
     payload: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class RawBaselineExecution:
+    """Measured row plus the real P9 execution detail used to derive it."""
+    row: ExperimentRow
+    chunks: Tuple[StreamingChunkResult, ...]
+    memory_report: UnifiedDomainReport
 
 
 def load_runner_config(path: Path) -> RunnerConfig:
@@ -213,7 +225,9 @@ def _decisions(
     return tuple(decisions)
 
 
-def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
+def run_raw_baseline_with_details(
+    config: RunnerConfig, baseline: Baseline
+) -> RawBaselineExecution:
     if baseline not in {
         Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF, Baseline.DYNAMIC_NOPF,
         Baseline.DYNAMIC_NAIVEPF, Baseline.MEMDOMAIN_RAW,
@@ -288,7 +302,7 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
     ]
     def ratio(numerator: int, denominator: int) -> float:
         return float(numerator) / float(denominator) if denominator else 0.0
-    return ExperimentRow(
+    row = ExperimentRow(
         schema_version=1,
         experiment_id=config.experiment_id,
         workload_name=config.workload_name,
@@ -321,6 +335,11 @@ def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
         mapping_failures=mapping_stats.allocation_failures,
         peak_occupied_bytes=mapping_stats.peak_occupied_bytes,
     )
+    return RawBaselineExecution(row, residency.chunks, full)
+
+
+def run_raw_baseline(config: RunnerConfig, baseline: Baseline) -> ExperimentRow:
+    return run_raw_baseline_with_details(config, baseline).row
 
 
 def run_best_static_baseline(

@@ -2,6 +2,10 @@
 
 DATE2 contains all simulator-side experiments required by paper section IV:
 
+- `exp1`: B1/C1 layer, expert-stage, IA/Weight/OA flow characterization;
+- `exp2`: C2 exhaustive static IA:Weight:OA Bank ownership sweep;
+- `exp3`: C3 NoPF versus NaivePF interference characterization;
+
 - `overall`: four controlled Top-1 networks, two homogeneous and two heterogeneous;
 - `ablation`: all static/dynamic, no-prefetch/naive/bank-aware components;
 - `window_chunk`: W={0,1,2,4,8} x Chunk={1,2,4,8} tiles;
@@ -13,3 +17,7 @@ Locations are fixed to `configs/MoE/DATE2`, `topologies/MoE/DATE2`, and
 topology edits, then `python3 run_date2_experiments.py --suite all`. Every
 matrix is schema-validated and asserts Safe <= best Static-NoPF and Oracle equal
 to the minimum real candidate. RTL and synthesis are explicitly out of scope.
+
+Run individual experiments with `python3 run_date2_experiments.py --exp expN`.
+For exp4-exp7 the command writes both the canonical matrix and real execution
+detail at expert, FFN-stage, Chunk, physical-Bank, and request granularity.

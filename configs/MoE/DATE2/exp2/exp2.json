@@ -1,0 +1,6 @@
+{
+  "purpose": "C2_exhaustive_static_bank_ownership",
+  "topology": "topologies/MoE/DATE2/exp2/MoDSE.csv",
+  "bank_total": 24,
+  "positive_partitions": 253
+}

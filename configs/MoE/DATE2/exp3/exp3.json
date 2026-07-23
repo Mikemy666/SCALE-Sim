@@ -1,0 +1,17 @@
+{
+  "purpose": "C3_naive_prefetch_interference",
+  "source_suite": "configs/MoE/DATE2/window_chunk",
+  "windows": [
+    0,
+    1,
+    2,
+    4,
+    8
+  ],
+  "chunk_tiles": [
+    1,
+    2,
+    4,
+    8
+  ]
+}

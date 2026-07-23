@@ -15,6 +15,24 @@ def raw(path): return pd.read_csv(path)
 def save(name):
     plt.tight_layout(); plt.savefig(FIG/name,bbox_inches="tight"); plt.close()
 
+def characterization():
+    d=raw(OUT/"exp1/layer_characterization.csv"); d.to_csv(FIG/"exp1_layer_data.csv",index=False)
+    grouped=d.groupby("layer_type")[["compute_cycles","memory_stall_cycles"]].sum()
+    grouped.plot(kind="bar",stacked=True,figsize=(8,4),color=["#4e79a7","#e15759"]);plt.ylabel("Cycles");plt.xlabel("")
+    save("exp1_layer_bottleneck.pdf")
+    fig,ax=plt.subplots(figsize=(6,4));
+    for kind,q in d.groupby("layer_type"): ax.scatter(q.bank_imbalance,q.stall_ratio,label=kind)
+    ax.set_xlabel("Bank imbalance");ax.set_ylabel("Stall ratio");ax.legend();save("exp1_stall_imbalance.pdf")
+
+    sweep=raw(OUT/"exp2/static_bank_sweep.csv");best=raw(OUT/"exp2/per_stage_best.csv")
+    best.to_csv(FIG/"exp2_per_stage_best.csv",index=False)
+    fig,ax=plt.subplots(figsize=(10,4));x=np.arange(len(best));ax.plot(x,best.ia_banks,label="IA");ax.plot(x,best.weight_banks,label="Weight");ax.plot(x,best.oa_banks,label="OA");ax.set_xlabel("Layer/stage");ax.set_ylabel("Best static Banks");ax.legend();save("exp2_best_static_ratio.pdf")
+
+    p=raw(OUT/"exp3/naive_prefetch_interference.csv");p.to_csv(FIG/"exp3_prefetch_data.csv",index=False)
+    fig,ax=plt.subplots(figsize=(8,4))
+    for chunk,q in p[p.baseline=="Static-NaivePF"].groupby("chunk_tiles"): ax.plot(q.window,q.total_cycles.astype(float),marker="o",label=f"C={chunk}")
+    ax.set_xlabel("Window");ax.set_ylabel("Static-NaivePF cycles");ax.legend();save("exp3_naive_interference.pdf")
+
 def overall():
     frames=[]
     for path in sorted((OUT/"overall").glob("*.csv")):
@@ -82,11 +100,15 @@ def notebook(name,title,files):
     (ROOT/"fig"/name).write_text(json.dumps(payload,ensure_ascii=False,indent=1)+"\n",encoding="utf-8")
 
 def main():
+    characterization()
     results={"overall":overall(),"ablation":ablation(),"window_chunk":window_chunk(),"robustness":robustness()}
     (FIG/"analysis.json").write_text(json.dumps(results,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
-    notebook("exp4.ipynb","DATE2 IV-B Overall",["outputs/DATE2/overall/*.csv"])
+    notebook("exp1.ipynb","DATE2 B1/C1 Layer and flow characterization",["outputs/DATE2/exp1/layer_characterization.csv"])
+    notebook("exp2.ipynb","DATE2 C2 Static Bank ownership mismatch",["outputs/DATE2/exp2/static_bank_sweep.csv","outputs/DATE2/exp2/per_stage_best.csv"])
+    notebook("exp3.ipynb","DATE2 C3 Naive prefetch interference",["outputs/DATE2/exp3/naive_prefetch_interference.csv"])
+    notebook("exp4.ipynb","DATE2 IV-B Overall",["outputs/DATE2/overall/*.csv","outputs/DATE2/exp4/*/EXPERT_REPORT.csv"])
     notebook("exp5.ipynb","DATE2 IV-C Ablation",["outputs/DATE2/ablation/MoDSE_components.csv"])
     notebook("exp6.ipynb","DATE2 IV-D Window x Chunk",["outputs/DATE2/window_chunk/w*_c*.csv"])
-    notebook("exp7.ipynb","DATE2 IV-E Robustness",["outputs/DATE2/robustness/*.csv"])
+    notebook("exp7.ipynb","DATE2 IV-E Robustness",["outputs/DATE2/robustness/*.csv","outputs/DATE2/exp7/*/EXPERT_REPORT.csv"])
     print(json.dumps(results,indent=2,ensure_ascii=False))
 if __name__=="__main__": main()

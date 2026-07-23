@@ -1,6 +1,6 @@
 """Generate DATE2 simulator configs, topologies, and output hierarchy."""
 from __future__ import annotations
-import csv, json, shutil, sys
+import csv, json, shutil, sys, random
 from copy import deepcopy
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +24,14 @@ def skewed(tokens, severity):
     values = [tokens*w//sum(weights) for w in weights]
     for i in range(tokens-sum(values)): values[i] += 1
     return tuple(values)
+
+def skewed_seed(tokens,severity,seed):
+    weights={"light":[4,3,2,2,1,1,1,1],"high":[16,8,4,2,1,1,1,1]}[severity]
+    rng=random.Random(seed); counts=[0]*8
+    population=[]
+    for expert,weight in enumerate(weights): population.extend([expert]*weight)
+    for _ in range(tokens): counts[rng.choice(population)]+=1
+    return tuple(counts)
 
 def variant_topology(path, source, counts):
     rows = []
@@ -83,6 +91,13 @@ def main():
         payload = generate_topology_runner_payload(topo,"homogeneous")
         payload["topology_provenance"]["routing_severity"] = mode
         save("robustness", f"routing_{mode}", payload)
+    for mode in ("light","high"):
+        for seed in range(40,45):
+            topo=TOPOLOGY_ROOT/"robustness"/f"routing_{mode}_seed{seed}.csv"
+            variant_topology(topo,source,skewed_seed(256,mode,seed))
+            payload=generate_topology_runner_payload(topo,"homogeneous")
+            payload["topology_provenance"].update(routing_severity=mode,routing_seed=seed)
+            save("robustness",f"routing_{mode}_seed{seed}",payload)
     for model in ("HMoE","Mixtral"):
         save("robustness", f"class_{model}", bases[model])
     for gpus in (1,2):
@@ -100,8 +115,12 @@ def main():
         topo.parent.mkdir(parents=True,exist_ok=True); topo.write_text("\n".join(lines)+"\n",encoding="utf-8")
         save("robustness",f"experts_{experts}",generate_topology_runner_payload(topo,"heterogeneous"))
 
+    # Characterization config/topology namespaces are part of DATE2 too.
+    from scripts.DATE2.run_date2_characterization import prepare as prepare_characterization
+    prepare_characterization()
     suites={s:len(list((CONFIG_ROOT/s).glob("*.json"))) for s in
             ("overall","ablation","window_chunk","robustness")}
+    suites["characterization"]=3
     manifest={"schema_version":1,"simulator_only":True,"rtl_dc_out_of_scope":True,
               "config_root":str(CONFIG_ROOT),"topology_root":str(TOPOLOGY_ROOT),
               "output_root":str(OUTPUT_ROOT),"suites":suites}

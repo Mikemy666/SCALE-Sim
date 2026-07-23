@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import heapq
 from dataclasses import dataclass, replace
+from itertools import combinations
 from math import sqrt
 from pathlib import Path
 from typing import Mapping, Sequence, Tuple
@@ -219,7 +221,7 @@ def _decisions(
         config.pressure_conflict_threshold,
         config.pressure_busy_threshold,
     )
-    decisions = []
+    decisions = {}
     free = {
         bank: manager.mapping.bank_capacity[bank] - manager.mapping.bank_occupied[bank]
         for bank in range(config.resources.bank_count)
@@ -227,28 +229,101 @@ def _decisions(
     ordered_chunks = tuple(sorted(
         config.chunks, key=lambda item: (item.use_cycle, item.chunk_id)
     ))
+    events = []
+    reservations = []
+    sequence = 0
     for index, chunk in enumerate(ordered_chunks):
         trigger_index = index - config.prefetch_window
         issue = 0 if trigger_index < 0 else ordered_chunks[trigger_index].use_cycle
-        while True:
-            local_pressure = (_pressure_snapshot(
-                compute_report, issue, config.resources.bank_count
-            ) if compute_report is not None else pressure)
-            snapshot = BankSnapshot(issue, local_pressure, free)
-            estimate = max(1, int(
-                (chunk.size_bytes + config.resources.bandwidth_bytes_per_cycle - 1)
-                // config.resources.bandwidth_bytes_per_cycle
-            ))
-            decision = policy.decide(chunk, snapshot, estimate, config.static_weight_banks)
-            if decision.action != PrefetchAction.DELAY:
-                break
-            issue = int(decision.issue_cycle)
-        decisions.append(decision)
-        if decision.action == PrefetchAction.PREFETCH:
-            for bank in decision.target_banks:
-                # Mirror P3's conservative reservation for subsequent online decisions.
-                free[bank] = max(0, free[bank] - (chunk.size_bytes // len(decision.target_banks)))
-    return tuple(decisions)
+        heapq.heappush(events, (issue, sequence, index, chunk))
+        sequence += 1
+
+    def release_through(cycle):
+        while reservations and reservations[0][0] <= cycle:
+            _, _, allocation = heapq.heappop(reservations)
+            for bank, amount in allocation.items():
+                free[bank] += amount
+
+    def feasible_allocation(chunk, banks):
+        banks = tuple(banks)
+        if len(banks) != chunk.bank_group_size or chunk.size_bytes < len(banks):
+            return None
+        if any(free.get(bank, 0) <= 0 for bank in banks):
+            return None
+        if sum(free[bank] for bank in banks) < chunk.size_bytes:
+            return None
+        allocation = {bank: 1 for bank in banks}
+        remaining = chunk.size_bytes - len(banks)
+        while remaining:
+            bank = max(banks, key=lambda item: (free[item]-allocation[item], -item))
+            available = free[bank] - allocation[bank]
+            if available <= 0:
+                return None
+            grant = min(remaining, available)
+            allocation[bank] += grant
+            remaining -= grant
+        return allocation
+
+    def fallback_group(chunk, local_pressure):
+        candidates = []
+        for group in combinations(
+            range(config.resources.bank_count), chunk.bank_group_size
+        ):
+            allocation = feasible_allocation(chunk, group)
+            if allocation is None:
+                continue
+            score = sum(local_pressure.get(bank, BankPressure()).score for bank in group)
+            candidates.append((score, -sum(free[bank] for bank in group), group, allocation))
+        return min(candidates, default=None)
+
+    while events:
+        issue, _, index, chunk = heapq.heappop(events)
+        if (
+            sum(free.values()) < chunk.size_bytes
+            or sum(value > 0 for value in free.values()) < chunk.bank_group_size
+        ):
+            release_through(issue)
+        local_pressure = (_pressure_snapshot(
+            compute_report, issue, config.resources.bank_count
+        ) if compute_report is not None else pressure)
+        snapshot = BankSnapshot(issue, local_pressure, dict(free))
+        estimate = max(1, int(
+            (chunk.size_bytes + config.resources.bandwidth_bytes_per_cycle - 1)
+            // config.resources.bandwidth_bytes_per_cycle
+        ))
+        decision = policy.decide(
+            chunk, snapshot, estimate, config.static_weight_banks
+        )
+        if decision.action == PrefetchAction.DELAY:
+            heapq.heappush(
+                events, (int(decision.issue_cycle), sequence, index, chunk)
+            )
+            sequence += 1
+            continue
+        if decision.action == PrefetchAction.CANCEL and issue < chunk.use_cycle:
+            # P4: pressure alone may not remove work present in the matched
+            # NaivePF baseline. Preserve the prefetch and use the best currently
+            # feasible group; execution remains capacity-safe if no group is
+            # available yet and will retry on the real release timeline.
+            fallback = fallback_group(chunk, local_pressure)
+            target = fallback[2] if fallback is not None else ()
+            decision = PrefetchDecision(
+                chunk.chunk_id, PrefetchAction.PREFETCH, issue, issue, target,
+                bool(target and target != config.static_weight_banks[:len(target)]),
+                "naive_plan_fallback",
+            )
+        decisions[index] = decision
+        if decision.action == PrefetchAction.PREFETCH and decision.target_banks:
+            allocation = feasible_allocation(chunk, decision.target_banks)
+            if allocation is not None:
+                for bank, amount in allocation.items():
+                    free[bank] -= amount
+                heapq.heappush(
+                    reservations,
+                    (max(chunk.use_cycle, issue + estimate), sequence, allocation),
+                )
+                sequence += 1
+    return tuple(decisions[index] for index in range(len(ordered_chunks)))
 
 
 def run_raw_baseline_with_details(

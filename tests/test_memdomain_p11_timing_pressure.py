@@ -46,7 +46,9 @@ class TimingAndPressureRegressionTests(unittest.TestCase):
         payload = self.payload(2)
         naive = self.execute_baseline(payload, Baseline.DYNAMIC_NAIVEPF)
         aware = self.execute_baseline(payload, Baseline.MEMDOMAIN_RAW)
-        self.assertGreater(aware.prefetch_requests, 0)
+        self.assertEqual(aware.prefetch_requests, naive.prefetch_requests)
+        self.assertEqual(aware.prefetch_bytes, naive.prefetch_bytes)
+        self.assertEqual(aware.prefetch_coverage, naive.prefetch_coverage)
         self.assertLess(aware.total_cycles, naive.total_cycles)
         self.assertLess(aware.prefetch_interference_stall_cycles,
                         naive.prefetch_interference_stall_cycles)

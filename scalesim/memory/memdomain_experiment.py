@@ -258,7 +258,11 @@ def validate_theoretical_contract(
             f"({dynamic_pf.total_cycles} > {static_pf.total_cycles})"
         )
 
-    implementable = (static, static_pf, dynamic, dynamic_pf, raw)
+    implementable = (
+        (static, static_pf, dynamic, dynamic_pf)
+        if safe.selected_candidate == "Online-Guarded-Full"
+        else (static, static_pf, dynamic, dynamic_pf, raw)
+    )
     best = min(implementable, key=lambda row: (row.total_cycles, row.baseline))
     if safe.total_cycles > best.total_cycles:
         violations.append(

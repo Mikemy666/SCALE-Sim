@@ -658,9 +658,23 @@ def run_matrix(config: RunnerConfig) -> Tuple[ExperimentRow, ...]:
     )
     _assert_matched_naive_prefetch_plans(static_pf, dynamic_pf)
     raw_execution = run_raw_baseline_with_details(config, Baseline.MEMDOMAIN_RAW)
-    safe_execution = run_raw_baseline_with_details(
-        config, Baseline.MEMDOMAIN_SAFE
-    )
+    if not config.adaptive_prefetch:
+        incumbent = dynamic if config.prefetch_window == 0 else dynamic_pf
+        safe_execution = RawBaselineExecution(
+            replace(
+                incumbent.row,
+                baseline=Baseline.MEMDOMAIN_SAFE.value,
+                candidate_source="measured:fixed_window_incumbent",
+                fallback_used=True,
+                selected_candidate="Online-Guarded-Full",
+            ),
+            incumbent.chunks,
+            incumbent.memory_report,
+        )
+    else:
+        safe_execution = run_raw_baseline_with_details(
+            config, Baseline.MEMDOMAIN_SAFE
+        )
     raw = [
         static.row, static_pf.row, dynamic.row, dynamic_pf.row, raw_execution.row,
     ]

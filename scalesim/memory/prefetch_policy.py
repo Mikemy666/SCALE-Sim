@@ -231,7 +231,7 @@ class BankAwarePrefetchPolicy:
             dynamic_cost = tuple(dynamic_cost)
             incumbent_cost = incumbent[:-1] if incumbent is not None else None
             guard_committed = (
-                incumbent_cost is None or dynamic_cost <= incumbent_cost
+                incumbent_cost is None or dynamic_cost < incumbent_cost
             )
             if not guard_committed:
                 target_banks = defaults

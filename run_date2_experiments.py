@@ -17,10 +17,22 @@ def main():
     parser.add_argument("--variant")
     parser.add_argument("--dry-run",action="store_true")
     args=parser.parse_args()
-    if args.exp in ("exp1","exp2","exp3"):
+    if args.exp in ("exp1","exp2"):
         command=[sys.executable,str(ROOT/"scripts/DATE2/run_date2_characterization.py"),"--exp",args.exp]
         if args.dry_run: print(" ".join(command))
         else: subprocess.run(command,cwd=ROOT,check=True)
+        return
+    if args.exp=="exp3":
+        matrix_command=[sys.executable,str(ROOT/"run_date2_experiments.py"),
+                        "--suite","window_chunk"]
+        aggregate_command=[sys.executable,
+                           str(ROOT/"scripts/DATE2/run_date2_characterization.py"),
+                           "--exp","exp3"]
+        if args.dry_run:
+            print(" ".join(matrix_command));print(" ".join(aggregate_command))
+        else:
+            subprocess.run(matrix_command,cwd=ROOT,check=True)
+            subprocess.run(aggregate_command,cwd=ROOT,check=True)
         return
     suites=((EXP_TO_SUITE[args.exp],) if args.exp else
             (SUITES if args.suite=="all" else (args.suite,)))

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 from scalesim.memory.memdomain_policy import ResourceBudget
+from scalesim.memory.memdomain_experiment import workload_digest
 from scalesim.memory.topology_workload import load_moe_topology
 from scalesim.memory.unified_bank_domain import UnifiedBankDomain, UnifiedMemoryRequest
 
@@ -64,6 +65,13 @@ def exp3():
         import re
         w,c=map(int,re.search(r"w(\d+)_c(\d+)",path.stem).groups())
         with path.open(newline="",encoding="utf-8") as f: data=list(csv.DictReader(f))
+        config_path=CFG/"window_chunk"/f"{path.stem}.json"
+        expected_hash=workload_digest(json.loads(config_path.read_text(encoding="utf-8")))
+        actual_hashes={row["workload_hash"] for row in data}
+        if actual_hashes!={expected_hash}:
+            raise RuntimeError(
+                f"stale exp3 source matrix {path}: regenerate {config_path.name} results"
+            )
         for baseline in ("Static-NoPF","Static-NaivePF"):
             r=next(x for x in data if x["baseline"]==baseline)
             rows.append({"window":w,"chunk_tiles":c,"baseline":baseline,**{k:r[k] for k in

@@ -21,3 +21,6 @@ to the minimum real candidate. RTL and synthesis are explicitly out of scope.
 Run individual experiments with `python3 run_date2_experiments.py --exp expN`.
 For exp4-exp7 the command writes both the canonical matrix and real execution
 detail at expert, FFN-stage, Chunk, physical-Bank, and request granularity.
+The exp3 command first executes all 20 Window x Chunk matrices and only then
+aggregates NoPF/NaivePF rows. Aggregation verifies every matrix workload hash
+against its current JSON and rejects stale pre-architecture results.

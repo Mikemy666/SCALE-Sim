@@ -20,6 +20,8 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import json
+from scalesim.memory.memdomain_experiment import workload_digest
 roots=[Path.cwd().resolve(),Path.cwd().resolve().parent]
 ROOT=next(p for p in roots if (p/'outputs/DATE2/exp3/naive_prefetch_interference.csv').exists())
 OUT=ROOT/'outputs/DATE2';FIG=ROOT/'fig/DATE2';FIG.mkdir(parents=True,exist_ok=True)
@@ -32,6 +34,8 @@ rows=[]
 for path in sorted((OUT/'window_chunk').glob('w*_c*.csv')):
     window,chunk=map(int,re.search(r'w(\\d+)_c(\\d+)',path.stem).groups())
     data=pd.read_csv(path)
+    config=json.loads((ROOT/f'configs/MoE/DATE2/window_chunk/{path.stem}.json').read_text())
+    assert set(data.workload_hash)=={workload_digest(config)}, f'Stale matrix: {path}'
     for baseline in ('Static-NoPF','Static-NaivePF'):
         row=data[data.baseline==baseline].iloc[0].to_dict();row.update(window=window,chunk_tiles=chunk);rows.append(row)
 detail=pd.DataFrame(rows)
@@ -55,8 +59,15 @@ axes[1].axhline(0,color='black',lw=.8);axes[1].set_xlabel('Window');axes[1].set_
 plt.tight_layout();plt.savefig(FIG/'exp3_performance_effect.pdf',bbox_inches='tight');plt.show()
 display(cycles.sort_values('change_percent').round(4))
 """),
+code("""
+best_point=cycles.loc[cycles.change_percent.idxmin()]
+worst_point=cycles.loc[cycles.change_percent.idxmax()]
+print('Best NaivePF point:',best_point[['window','chunk_tiles','change_percent']].to_dict())
+print('Worst NaivePF point:',worst_point[['window','chunk_tiles','change_percent']].to_dict())
+assert cycles[cycles.window==0].delta_cycles.eq(0).all(), 'W=0 control must equal NoPF'
+"""),
 md("""
-W=0 时两方案完全相同，说明控制组正确。最佳点为 W=8、C=1，NaivePF 仅改善约 **0.298%**；W=4、C=8 退化约 **0.125%**。整体效应远小于 1%，不能描述成显著预取收益或显著干扰。
+W=0 必须与 NoPF 完全相同。负的 `change_percent` 表示预取改善，正值表示退化；最佳/最差点由上方代码从当前数据计算，不在 Notebook 中硬编码旧结果。
 """),
 md("""
 ## 2. Timely、Late 与 Coverage
@@ -75,8 +86,12 @@ print('Timely ratio range for W>0:',active.timely_prefetch_ratio.min(),active.ti
 print('Late ratio range for W>0:',active.late_prefetch_ratio.min(),active.late_prefetch_ratio.max())
 print('Coverage range for W>0:',active.prefetch_coverage.min(),active.prefetch_coverage.max())
 """),
+code("""
+timeliness=active.groupby('window').agg(timely_mean=('timely_prefetch_ratio','mean'),late_mean=('late_prefetch_ratio','mean'),coverage_mean=('prefetch_coverage','mean')).reset_index()
+display(timeliness.round(4))
+"""),
 md("""
-所有 W>0 点的 timely ratio 均为 **0**、late ratio 均为 **1**，coverage 为 38.8%–50%。这证明固定距离 Naive Prefetch 没有在 deadline 前完成；其微小周期改善来自把部分 demand stall 转为 late-prefetch stall，而不是产生真正的 timely hit。
+随着 Window 增大，合理的新时间轴应当使 timely ratio 上升、late ratio 下降。若仍然全部为 late，说明运行结果不是当前架构生成，或传输带宽/计算间隔仍不匹配。
 """),
 md("""
 ## 3. Demand stall 与 Late-prefetch stall 分解
@@ -111,14 +126,14 @@ print('Explicit interference stall unique values:',sorted(naive.prefetch_interfe
 print('Conflict-count range:',naive.bank_conflict_count.min(),naive.bank_conflict_count.max())
 """),
 md("""
-显式 prefetch interference stall 在全部点均为 **0**，Bank conflict count 只在 1,784–1,800 之间变化。唯一的退化点 W=4、C=8 也没有对应的 interference stall。因此，当前数据不能证明 Naive Prefetch 通过 Bank 冲突显著伤害计算；更可能是 late stall 和固定容量调度的细小差异。
+## 实验 3 判断规则
 
-## 实验 3 最终判断
+- Window sweep 应同时覆盖 late-dominated、混合和 timely-dominated 区域。
+- 若大 Window 提高及时性但增加 interference/occupancy，可支持预取时机权衡。
+- 若某些 NaivePF 点慢于 NoPF，且退化与 interference、queue 或 conflict 同步，才能证明计算—预取 Bank 干扰。
+- Chunk 结论必须联合 demand stall、mapping failures 和 occupancy，不能只看总周期。
 
-- **可以证明**：Naive Prefetch 在当前调度下全部过晚；单纯增大 Window 没有产生 timely hit；Chunk 粒度显著影响 demand stall、映射失败和总周期。
-- **只能弱支持**：Naive Prefetch 偶尔会退化，当前仅一个点退化 0.125%。
-- **不能证明**：Naive Prefetch 引起显著 Bank conflict/interference。显式干扰为 0，冲突数几乎不变。
-- **架构风险**：如果论文需要用 C3 强力论证 Bank-aware Prefetch，必须先修复预取 deadline/传输时序，使 sweep 同时出现 timely、late 和受压力干扰的区域；不能用当前图夸大结论。
+Notebook 所有最佳点、最差点和及时性表均从当前 CSV 动态计算，避免再次引用旧架构结果。
 """)]
 nb={"cells":cells,"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python","version":"3"}},"nbformat":4,"nbformat_minor":5}
 (ROOT/'fig/exp3.ipynb').write_text(json.dumps(nb,ensure_ascii=False,indent=1)+'\n',encoding='utf-8')

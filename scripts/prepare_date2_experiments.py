@@ -47,6 +47,12 @@ def variant_topology(path, source, counts):
 
 def save(suite, name, payload):
     payload = deepcopy(payload)
+    if suite in {"overall", "ablation", "robustness"}:
+        payload["policy"].update({
+            "adaptive_prefetch": True,
+            "max_prefetch_window": 8,
+            "max_prefetch_capacity_fraction": 0.25,
+        })
     payload.update(experiment_id=f"date2-{suite}-{name}", date2_suite=suite,
                    date2_variant=name)
     write_runner_payload(CONFIG_ROOT / suite / f"{name}.json", payload)

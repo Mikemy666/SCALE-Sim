@@ -57,6 +57,9 @@ class RunnerConfig:
     chunks: Tuple[WeightChunk, ...]
     compute_requests: Tuple[UnifiedMemoryRequest, ...]
     payload: Mapping[str, object]
+    adaptive_prefetch: bool = False
+    max_prefetch_window: int = 8
+    max_prefetch_capacity_fraction: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,11 @@ def load_runner_config(path: Path) -> RunnerConfig:
         preferred_banks=tuple(int(bank) for bank in item.get("preferred_banks", ())),
     ) for item in payload.get("compute_requests", ()))
     policy = payload["policy"]
+    capacity_fraction = float(
+        policy.get("max_prefetch_capacity_fraction", 0.25)
+    )
+    if not 0.0 < capacity_fraction <= 1.0:
+        raise ValueError("max_prefetch_capacity_fraction must be in (0, 1]")
     return RunnerConfig(
         experiment_id=str(payload["experiment_id"]),
         workload_name=str(payload["workload_name"]),
@@ -112,6 +120,12 @@ def load_runner_config(path: Path) -> RunnerConfig:
         chunks=chunks,
         compute_requests=requests,
         payload=payload,
+        adaptive_prefetch=bool(policy.get("adaptive_prefetch", False)),
+        max_prefetch_window=max(
+            int(policy["prefetch_window"]),
+            int(policy.get("max_prefetch_window", 8)),
+        ),
+        max_prefetch_capacity_fraction=capacity_fraction,
     )
 
 
@@ -196,6 +210,23 @@ def _communication_stall(config: RunnerConfig) -> int:
     return latency + int((remote_bytes + bandwidth - 1) // bandwidth) if remote_bytes else 0
 
 
+def _effective_prefetch_window(
+    config: RunnerConfig, baseline: Baseline
+) -> int:
+    if baseline != Baseline.MEMDOMAIN_RAW or not config.adaptive_prefetch:
+        return config.prefetch_window
+    largest_chunk = max((chunk.size_bytes for chunk in config.chunks), default=1)
+    capacity_window = max(
+        config.prefetch_window,
+        int(
+            config.resources.capacity_bytes
+            * config.max_prefetch_capacity_fraction
+            // largest_chunk
+        ),
+    )
+    return min(config.max_prefetch_window, capacity_window)
+
+
 def _decisions(
     baseline: Baseline,
     config: RunnerConfig,
@@ -229,11 +260,12 @@ def _decisions(
     ordered_chunks = tuple(sorted(
         config.chunks, key=lambda item: (item.use_cycle, item.chunk_id)
     ))
+    effective_window = _effective_prefetch_window(config, baseline)
     events = []
     reservations = []
     sequence = 0
     for index, chunk in enumerate(ordered_chunks):
-        trigger_index = index - config.prefetch_window
+        trigger_index = index - effective_window
         issue = 0 if trigger_index < 0 else ordered_chunks[trigger_index].use_cycle
         heapq.heappush(events, (issue, sequence, index, chunk))
         sequence += 1
@@ -417,7 +449,11 @@ def run_raw_baseline_with_details(
         workload_name=config.workload_name,
         workload_hash=workload_digest(config.payload),
         baseline=baseline.value,
-        candidate_source="measured",
+        candidate_source=(
+            f"measured:adaptive_window={_effective_prefetch_window(config, baseline)}"
+            if baseline == Baseline.MEMDOMAIN_RAW and config.adaptive_prefetch
+            else "measured"
+        ),
         bank_count=config.resources.bank_count,
         capacity_bytes=config.resources.capacity_bytes,
         bandwidth_bytes_per_cycle=config.resources.bandwidth_bytes_per_cycle,

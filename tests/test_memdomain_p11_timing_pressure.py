@@ -55,6 +55,33 @@ class TimingAndPressureRegressionTests(unittest.TestCase):
         self.assertGreater(aware.timely_prefetch_ratio,
                            naive.timely_prefetch_ratio)
 
+    def test_capacity_bounded_adaptive_window_improves_joint_policy(self):
+        fixed_payload = self.payload(2)
+        adaptive_payload = self.payload(2)
+        adaptive_payload["policy"].update({
+            "adaptive_prefetch": True,
+            "max_prefetch_window": 8,
+            "max_prefetch_capacity_fraction": 0.25,
+        })
+        fixed = self.execute_baseline(fixed_payload, Baseline.MEMDOMAIN_RAW)
+        adaptive = self.execute_baseline(
+            adaptive_payload, Baseline.MEMDOMAIN_RAW
+        )
+        self.assertLess(adaptive.total_cycles, fixed.total_cycles)
+        self.assertGreater(adaptive.timely_prefetch_ratio,
+                           fixed.timely_prefetch_ratio)
+        self.assertIn("adaptive_window=8", adaptive.candidate_source)
+
+    def test_adaptive_window_respects_capacity_guard(self):
+        payload = self.payload(2)
+        payload["policy"].update({
+            "adaptive_prefetch": True,
+            "max_prefetch_window": 8,
+            "max_prefetch_capacity_fraction": 0.01,
+        })
+        row = self.execute_baseline(payload, Baseline.MEMDOMAIN_RAW)
+        self.assertIn("adaptive_window=2", row.candidate_source)
+
 
 if __name__ == "__main__":
     unittest.main()

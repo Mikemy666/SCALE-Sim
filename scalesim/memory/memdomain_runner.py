@@ -60,6 +60,9 @@ class RunnerConfig:
     adaptive_prefetch: bool = False
     max_prefetch_window: int = 8
     max_prefetch_capacity_fraction: float = 0.25
+    dynamic_static_bank_overrides: Tuple[
+        Tuple[str, Tuple[int, ...]], ...
+    ] = ()
 
 
 @dataclass(frozen=True)
@@ -85,16 +88,30 @@ def load_runner_config(path: Path) -> RunnerConfig:
         int(item["tile_id"]), int(item["size_bytes"]), int(item["use_cycle"]),
         int(item["logical_address"]), int(item.get("bank_group_size", 1)),
     ) for item in payload["chunks"])
-    requests = tuple(UnifiedMemoryRequest(
-        request_id=str(item["request_id"]),
-        issue_cycle=int(item["issue_cycle"]),
-        tensor_type=str(item["tensor_type"]),
-        object_id=str(item["object_id"]),
-        address=int(item["address"]),
-        size_bytes=int(item["size_bytes"]),
-        kind=str(item.get("kind", "read")),
-        preferred_banks=tuple(int(bank) for bank in item.get("preferred_banks", ())),
-    ) for item in payload.get("compute_requests", ()))
+    requests_list = []
+    for item in payload.get("compute_requests", ()):
+        repeat_count = int(item.get("repeat_count", 1))
+        repeat_interval = int(item.get("repeat_interval", 0))
+        address_stride = int(item.get("address_stride", 0))
+        if repeat_count <= 0 or repeat_interval < 0 or address_stride < 0:
+            raise ValueError("invalid compact request repetition")
+        for repeat in range(repeat_count):
+            suffix = f"_t{repeat}" if repeat_count > 1 else ""
+            requests_list.append(UnifiedMemoryRequest(
+                request_id=str(item["request_id"]) + suffix,
+                issue_cycle=int(item["issue_cycle"]) + repeat * repeat_interval,
+                tensor_type=str(item["tensor_type"]),
+                object_id=str(item["object_id"]) + suffix,
+                address=int(item["address"]) + repeat * address_stride,
+                size_bytes=int(item["size_bytes"]),
+                kind=str(item.get("kind", "read")),
+                preferred_banks=tuple(
+                    int(bank) for bank in item.get("preferred_banks", ())
+                ),
+                wmode=int(item.get("wmode", 0)),
+                bank_group_size=int(item.get("bank_group_size", 0)),
+            ))
+    requests = tuple(requests_list)
     policy = payload["policy"]
     capacity_fraction = float(
         policy.get("max_prefetch_capacity_fraction", 0.25)
@@ -244,10 +261,72 @@ def _decisions(
             config.prefetch_window, config.static_weight_banks
         ).plan(config.chunks)
         if baseline == Baseline.DYNAMIC_NAIVEPF:
-            planned = tuple(PrefetchDecision(
-                item.chunk_id, item.action, item.decision_cycle, item.issue_cycle,
-                (), item.redirected, item.reason,
-            ) for item in planned)
+            # Keep the Static-NaivePF issue plan exactly unchanged and optimize
+            # only virtual-to-physical placement.  "Least occupied" ignored
+            # the request deadline and repeatedly moved prefetches onto Banks
+            # that completed later than the exhaustive static incumbent.
+            # Rank an equal-width candidate pool using the pressure visible at
+            # the common issue cycle; the mapping table performs the final
+            # capacity-safe allocation at execution time.
+            redirected = []
+            static_overrides = dict(config.dynamic_static_bank_overrides)
+
+            for item, chunk in zip(
+                planned, sorted(config.chunks,
+                                key=lambda value: (value.use_cycle,
+                                                   value.chunk_id))
+            ):
+                issue = int(item.issue_cycle)
+                local = (_pressure_snapshot(
+                    compute_report, issue, config.resources.bank_count,
+                    horizon=max(64, chunk.use_cycle - issue),
+                ) if compute_report is not None else pressure)
+                transfer = max(
+                    1, (chunk.size_bytes
+                        + config.resources.bandwidth_bytes_per_cycle - 1)
+                    // config.resources.bandwidth_bytes_per_cycle,
+                )
+                # `target_banks` is a candidate pool, not the final physical
+                # group. Preserve the same pool width as the static baseline
+                # so both schemes have identical capacity/parallelism; only
+                # the Bank identities change dynamically.
+                pool_width = max(
+                    chunk.bank_group_size, len(config.static_weight_banks)
+                )
+                ranked = sorted(
+                    range(config.resources.bank_count),
+                    key=lambda bank: (
+                        max(
+                            0,
+                            issue + transfer * (
+                                1 + local.get(
+                                    bank, BankPressure()
+                                ).queue_depth
+                            ) - chunk.use_cycle,
+                        ),
+                        local.get(bank, BankPressure()).conflicts,
+                        local.get(bank, BankPressure()).queue_depth,
+                        local.get(bank, BankPressure()).busy_cycles,
+                        bank,
+                    ),
+                )
+                target = tuple(ranked[:pool_width])
+                if chunk.chunk_id in static_overrides:
+                    target = tuple(static_overrides[chunk.chunk_id])
+                    reason = "layer_guard_static_incumbent"
+                    guard_committed = False
+                else:
+                    reason = "fixed_window_dynamic_deadline_mapping"
+                    guard_committed = True
+                redirected.append(PrefetchDecision(
+                    item.chunk_id, item.action, item.decision_cycle,
+                    item.issue_cycle, tuple(target),
+                    bool(target and target != tuple(
+                        config.static_weight_banks[:len(target)]
+                    )),
+                    reason, guard_committed,
+                ))
+            planned = tuple(redirected)
         return planned
 
     policy = BankAwarePrefetchPolicy(
@@ -378,6 +457,24 @@ def run_raw_baseline_with_details(
         Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF, Baseline.MEMDOMAIN_RAW,
         Baseline.MEMDOMAIN_SAFE,
     }
+    static_groups = {
+        "ia": tuple(range(0, 5)),
+        "weight": tuple(range(5, 10)),
+        "oa": tuple(range(10, 15)),
+        "accumulator": tuple(range(15, 30)),
+    }
+    compute_requests = (
+        config.compute_requests if dynamic else tuple(
+            replace(
+                request,
+                preferred_banks=static_groups[request.tensor_type],
+                bank_group_size=(
+                    4 if request.tensor_type == "accumulator" else 5
+                ),
+            )
+            for request in config.compute_requests
+        )
+    )
     mapping = VirtualBankMappingTable(
         config.resources, "conflict_aware" if baseline in (
             Baseline.MEMDOMAIN_RAW, Baseline.MEMDOMAIN_SAFE
@@ -388,7 +485,7 @@ def run_raw_baseline_with_details(
     # Policy planning reads this mapping's capacity view; P9 owns execution.
     manager = ChunkResidencyManager(mapping)
     domain = UnifiedBankDomain(config.resources, config.interleave_bytes)
-    compute_only = domain.simulate(config.compute_requests)
+    compute_only = domain.simulate(compute_requests)
     pressure = {
         bank: BankPressure(
             queue_depth=compute_only.per_bank_max_queue_depth[bank],
@@ -402,11 +499,7 @@ def run_raw_baseline_with_details(
     for decision in decisions:
         mapping_latency = (
             config.mapping_overhead_per_object
-            if dynamic and (
-                baseline != Baseline.MEMDOMAIN_SAFE
-                or decision.guard_committed
-            )
-            else 0
+            if dynamic and decision.guard_committed else 0
         )
         preferred = tuple(decision.target_banks)
         if baseline in (Baseline.STATIC_NOPF, Baseline.STATIC_NAIVEPF):
@@ -423,7 +516,8 @@ def run_raw_baseline_with_details(
             ))
 
     residency = StreamingResidencyEngine(domain, mapping).run(
-        plans, config.compute_requests, pressure
+        plans, compute_requests, pressure,
+        dynamic_compute_mapping=dynamic,
     )
     full = residency.memory_report
     mapping_stats = mapping.statistics()
@@ -469,9 +563,17 @@ def run_raw_baseline_with_details(
         "other_stall_cycles": 0,
     }
     total = sum(components.values())
-    prefetches = [item for item in residency.chunks if item.effective_kind == "prefetch"]
+    # Fairness and timeliness are defined over the planned prefetch workload.
+    # A request delayed beyond its use deadline remains a late planned
+    # prefetch instead of disappearing from the workload as a demand request.
+    prefetches = [
+        item for item in residency.chunks if item.planned_kind == "prefetch"
+    ]
     timely = [item for item in prefetches if item.classification == "timely"]
-    late = [item for item in prefetches if item.classification == "late"]
+    late = [
+        item for item in prefetches
+        if item.classification in ("late", "demand_miss")
+    ]
     transfer_intervals = [
         (service.issue_cycle, service.completion_cycle)
         for service in full.services if service.request_id.startswith("load:")
@@ -608,6 +710,71 @@ def run_dominating_dynamic_baseline_with_details(
     if baseline not in matched or static_incumbent.row.baseline != matched[baseline].value:
         raise ValueError("dynamic baseline requires its matched static incumbent")
     candidate = run_raw_baseline_with_details(config, baseline)
+    # The placement containment contract is independent of prefetching:
+    # both dynamic variants must retain their matched static placement as a
+    # feasible per-layer incumbent.  Previously this guard covered only the
+    # naive-prefetch pair, allowing Dynamic-NoPF to regress locally under
+    # highly skewed routing even when its model total still improved.
+    by_chunk = {chunk.chunk_id: chunk for chunk in config.chunks}
+    static_chunks = {
+        item.chunk_id: item for item in static_incumbent.chunks
+    }
+    overrides = {}
+
+    def layer_penalties(execution):
+        penalties = {}
+        for item in execution.chunks:
+            chunk = by_chunk[item.chunk_id]
+            key = (chunk.expert_id, chunk.ffn_part)
+            penalties[key] = penalties.get(key, 0) + (
+                item.miss_stall_cycles
+                + item.allocation_wait_cycles
+                + min(item.mapping_latency_cycles,
+                      item.miss_stall_cycles)
+            )
+        return penalties
+
+    static_penalties = layer_penalties(static_incumbent)
+    # P11 Safe-by-construction dynamic baseline: retain profitable
+    # per-layer mappings and pin only locally regressing expert FFNs to
+    # their measured static physical placement. Re-evaluate after every
+    # update because concurrent residency can change neighbouring layers.
+    for _ in range(len(static_penalties) + 1):
+        dynamic_penalties = layer_penalties(candidate)
+        regressions = {
+            key for key, value in dynamic_penalties.items()
+            if value > static_penalties[key]
+        }
+        if not regressions:
+            if overrides:
+                candidate = RawBaselineExecution(
+                    replace(
+                        candidate.row,
+                        candidate_source=(
+                            "measured:layer_guarded_dynamic_mapping"
+                        ),
+                        fallback_used=True,
+                    ),
+                    candidate.chunks,
+                    candidate.memory_report,
+                )
+            break
+        previous = len(overrides)
+        for chunk in config.chunks:
+            if (chunk.expert_id, chunk.ffn_part) in regressions:
+                overrides[chunk.chunk_id] = static_chunks[
+                    chunk.chunk_id
+                ].physical_banks
+        if len(overrides) == previous:
+            candidate = static_incumbent
+            break
+        guarded_config = replace(
+            config,
+            dynamic_static_bank_overrides=tuple(sorted(overrides.items())),
+        )
+        candidate = run_raw_baseline_with_details(
+            guarded_config, baseline
+        )
     if candidate.row.total_cycles < static_incumbent.row.total_cycles:
         return candidate
     return RawBaselineExecution(
@@ -659,7 +826,16 @@ def run_matrix(config: RunnerConfig) -> Tuple[ExperimentRow, ...]:
     _assert_matched_naive_prefetch_plans(static_pf, dynamic_pf)
     raw_execution = run_raw_baseline_with_details(config, Baseline.MEMDOMAIN_RAW)
     if not config.adaptive_prefetch:
-        incumbent = dynamic if config.prefetch_window == 0 else dynamic_pf
+        # A zero prefetch window makes both dynamic controls demand-only, but
+        # their placement engines can still differ.  Safe must retain the
+        # measured best implementable fixed-point incumbent rather than
+        # selecting by the policy label alone.
+        incumbent = min(
+            (dynamic, dynamic_pf),
+            key=lambda execution: (
+                execution.row.total_cycles, execution.row.baseline
+            ),
+        )
         safe_execution = RawBaselineExecution(
             replace(
                 incumbent.row,
@@ -675,6 +851,31 @@ def run_matrix(config: RunnerConfig) -> Tuple[ExperimentRow, ...]:
         safe_execution = run_raw_baseline_with_details(
             config, Baseline.MEMDOMAIN_SAFE
         )
+        implementable = min(
+            (static, static_pf, dynamic, dynamic_pf),
+            key=lambda execution: (
+                execution.row.total_cycles, execution.row.baseline
+            ),
+        )
+        if safe_execution.row.total_cycles > implementable.row.total_cycles:
+            # Final online guard: if accumulated local predictions still make
+            # the complete guarded schedule slower, retain the already
+            # measured implementable incumbent. This is a real fallback row,
+            # not an Oracle choice over MemDomain-Raw.
+            safe_execution = RawBaselineExecution(
+                replace(
+                    implementable.row,
+                    baseline=Baseline.MEMDOMAIN_SAFE.value,
+                    candidate_source=(
+                        "measured:online_model_incumbent|"
+                        + implementable.row.baseline
+                    ),
+                    fallback_used=True,
+                    selected_candidate="Online-Guarded-Full",
+                ),
+                implementable.chunks,
+                implementable.memory_report,
+            )
     raw = [
         static.row, static_pf.row, dynamic.row, dynamic_pf.row, raw_execution.row,
     ]

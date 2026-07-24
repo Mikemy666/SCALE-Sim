@@ -182,14 +182,38 @@ class VirtualBankMappingTable:
         selected = None
         planned = None
         feasible = []
-        active_overlaps = {
-            bank: sum(
-                record.active and bank in record.physical_banks
-                for record in self.records.values()
+        # Buckyball exclusive-vBank fast path: a live virtual group claims the
+        # complete capacity of every selected pBank. Since `ordered` is already
+        # pressure-ranked, the first free Banks are the optimal legal group;
+        # enumerating C(30, col) combinations would only rediscover it.
+        uniform_capacity = len(set(self.bank_capacity.values())) == 1
+        per_bank_capacity = next(iter(self.bank_capacity.values()))
+        exclusive_request = (
+            uniform_capacity
+            and obj.size_bytes == obj.bank_group_size * per_bank_capacity
+        )
+        if exclusive_request:
+            free_ranked = tuple(
+                bank for bank in ordered if self.bank_occupied[bank] == 0
             )
-            for bank in range(self.resources.bank_count)
-        }
-        for indices in combinations(range(len(ordered)), obj.bank_group_size):
+            if len(free_ranked) >= obj.bank_group_size:
+                selected = free_ranked[:obj.bank_group_size]
+                planned = {
+                    bank: self.bank_capacity[bank] for bank in selected
+                }
+        active_overlaps = (
+            {
+                bank: sum(
+                    record.active and bank in record.physical_banks
+                    for record in self.records.values()
+                )
+                for bank in range(self.resources.bank_count)
+            }
+            if self.policy == "conflict_aware" and selected is None else {}
+        )
+        for indices in (() if exclusive_request else combinations(
+            range(len(ordered)), obj.bank_group_size
+        )):
             banks = tuple(ordered[index] for index in indices)
             candidate = self._plan_bytes(banks, obj.size_bytes)
             if candidate is not None:
@@ -258,6 +282,7 @@ class VirtualBankMappingTable:
         address: int,
         size_bytes: int,
         kind: str = "read",
+        wmode: int = 0,
     ) -> UnifiedMemoryRequest:
         record = self.resolve(object_id, cycle)
         return UnifiedMemoryRequest(
@@ -269,6 +294,7 @@ class VirtualBankMappingTable:
             size_bytes=size_bytes,
             kind=kind,
             preferred_banks=record.physical_banks,
+            wmode=wmode,
         )
 
     def statistics(self) -> MappingStatistics:

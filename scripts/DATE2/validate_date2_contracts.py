@@ -19,7 +19,7 @@ from scalesim.memory.memdomain_experiment import (  # noqa: E402
     workload_digest,
 )
 
-MATRIX_SUITES = ("overall", "ablation", "window_chunk", "robustness")
+MATRIX_SUITES = ("overall", "window_chunk", "robustness")
 BASELINE_NAMES = (
     Baseline.STATIC_NOPF.value,
     Baseline.STATIC_NAIVEPF.value,
@@ -46,6 +46,8 @@ def audit_matrix(root: Path, suite: str, path: Path):
         raise ValueError(f"stale workload hash: {path}")
     by_name = {row.baseline: row for row in rows}
     best_baseline = min(by_name[name].total_cycles for name in BASELINE_NAMES)
+    static_pf = by_name[Baseline.STATIC_NAIVEPF.value]
+    dynamic_pf = by_name[Baseline.DYNAMIC_NAIVEPF.value]
     safe = by_name[Baseline.MEMDOMAIN_SAFE.value]
     return {
         "suite": suite,
@@ -53,6 +55,10 @@ def audit_matrix(root: Path, suite: str, path: Path):
         "best_baseline_cycles": best_baseline,
         "safe_cycles": safe.total_cycles,
         "gain": (best_baseline / safe.total_cycles) - 1.0,
+        "dynamic_pf_gain": (
+            static_pf.total_cycles / dynamic_pf.total_cycles
+        ) - 1.0,
+        "dynamic_pf_source": dynamic_pf.candidate_source,
         "safe_source": safe.candidate_source,
         "safe_policy": safe.selected_candidate,
         "fallback_used": safe.fallback_used,
@@ -62,20 +68,24 @@ def audit_matrix(root: Path, suite: str, path: Path):
 def audit_layer_reports(root: Path, suites, require=False):
     failures = []
     experiment_dirs = {
-        "overall": "exp4", "ablation": "exp5",
-        "window_chunk": "exp6", "robustness": "exp7",
+        "overall": "exp4", "window_chunk": "exp5", "robustness": "exp6",
     }
     reports = []
     expected = 0
     for suite in suites:
-        expected += len(list(
+        configs = sorted(
             (root / "configs/MoE/DATE2" / suite).glob("*.json")
-        ))
-        reports.extend(sorted(
-            (root / "outputs/DATE2" / experiment_dirs[suite]).glob(
-                "*/LAYER_DOMINANCE_REPORT.csv"
-            )
-        ))
+        )
+        expected += len(configs)
+        reports.extend(
+            root / "outputs/DATE2" / experiment_dirs[suite]
+            / config.stem / "LAYER_DOMINANCE_REPORT.csv"
+            for config in configs
+            if (
+                root / "outputs/DATE2" / experiment_dirs[suite]
+                / config.stem / "LAYER_DOMINANCE_REPORT.csv"
+            ).exists()
+        )
     if require and len(reports) != expected:
         raise ValueError(
             f"expected {expected} layer dominance reports, found {len(reports)}"
@@ -111,6 +121,20 @@ def audit(
 
     overall = [item for item in records if item["suite"] == "overall"]
     if "overall" in suites:
+        non_strict_dynamic = [
+            item for item in overall
+            if item["dynamic_pf_gain"] <= 0.0
+            or "incumbent_static_mapping" in item["dynamic_pf_source"]
+        ]
+        if non_strict_dynamic:
+            details = ", ".join(
+                f"{item['variant']}={item['dynamic_pf_gain']:.2%}"
+                for item in non_strict_dynamic
+            )
+            raise ValueError(
+                "overall Dynamic-NaivePF must strictly beat matched "
+                f"Static-NaivePF without whole-model fallback: {details}"
+            )
         weak = [
             item for item in overall if item["gain"] + 1e-12 < min_model_gain
         ]

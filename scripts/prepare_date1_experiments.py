@@ -10,6 +10,10 @@ CONFIG_ROOT = ROOT / 'configs' / 'MoE' / 'DATE1'
 TOPOLOGY_ROOT = ROOT / 'topologies' / 'MoE' / 'DATE1'
 OUTPUT_ROOT = ROOT / 'outputs' / 'DATE1'
 
+# Paper-wide fixed-bank baseline selected for Exp3--Exp7.
+# IA : Weight : OA = 4 : 14 : 6 (24 physical banks in total).
+STATIC_BEST_BANKS = (4, 14, 6)
+
 
 BASE = {
     'arrayheight': '64', 'arraywidth': '64',
@@ -38,6 +42,7 @@ RUN = {
     'ExpertsPerGPU': '4', 'ComputeEnginesPerGPU': '4',
     'TopK': '1', 'MoERoutingMode': 'topology_counts', 'MoETokens': '256',
     'RoutingFile': '', 'RoutingSeed': '40', 'RoutingSkewFactor': '1.0',
+    'EnableRoutedTokenAwareTrace': 'False',
     'MoEActiveExpertMode': 'all', 'ActiveExpertIds': '',
     'EnableChunkPrefetch': 'False', 'InitialChunk': '1',
     'ChunkPrefetchWindow': '0', 'ChunkSizeBytes': '0',
@@ -46,6 +51,7 @@ RUN = {
     'EnableBlackBoxBackgroundPressure': 'False',
     'GlobalMemoryBandwidthBytesPerCycle': '1024',
     'DynamicBankOverhead': 'old_model',
+    'DynamicMoEOnly': 'False',
     'CommunicationModel': 'latency_plus_bandwidth', 'PrecisionBytes': '2',
     'CommunicationLatencyCycles': '20',
     'CommunicationBandwidthBytesPerCycle': '128',
@@ -113,26 +119,29 @@ def main():
     copy_topology('exp1', 'topologies/MoE/MoDSE.csv', 'modse_full.csv')
     write_config('exp1', 'static_no_prefetch', ep=False)
 
-    # Exp2: complete MoDSE, static IA/W/OA ratio sweep.
+    # Exp2: one detailed run; the dynamic allocator exports all 253 static
+    # IA/W/OA candidates to BANK_ALLOCATION_SWEEP_REPORT.csv.
     copy_topology('exp2', 'topologies/MoE/MoDSE.csv', 'modse_full.csv')
-    for banks in ((8, 8, 8), (5, 15, 4), (7, 14, 3), (14, 7, 3),
-                  (11, 7, 6), (5, 7, 12), (3, 7, 14)):
-        write_config('exp2', 'static_' + '_'.join(map(str, banks)), ep=False, banks=banks)
+    write_config('exp2', 'exhaustive_static_search', {
+        'EnableDynamic': 'True', 'EnableChunkPrefetch': 'False',
+        'ChunkPrefetchWindow': 0, 'DynamicMoEOnly': 'True',
+    }, ep=False)
 
     # Exp3: MoE-only static prefetch interference sweep.
+    exp3_banks = STATIC_BEST_BANKS
     copy_topology('exp3', 'topologies/MoE/MoE.csv', 'modse_moe_8e.csv')
-    write_config('exp3', 'static_no_prefetch', {'MoERoutingMode': 'topology_counts'})
+    write_config('exp3', 'static_no_prefetch', {'MoERoutingMode': 'topology_counts'}, banks=exp3_banks)
     for window in (1, 2, 4):
         write_config('exp3', f'static_prefetch_w{window}', {
             'EnableChunkPrefetch': 'True', 'ChunkPrefetchWindow': window,
             'MoERoutingMode': 'topology_counts',
-        })
+        }, banks=exp3_banks)
 
-    # Exp4: static equal, selected best-static candidate, and dynamic.
+    # Exp4: historical equal baseline, selected best-static, and dynamic.
     copy_topology('exp4', 'topologies/MoE/MoE.csv', 'modse_moe_8e.csv')
     write_config('exp4', 'static_equal_8_8_8', {'MoERoutingMode': 'topology_counts'})
-    write_config('exp4', 'static_candidate_7_14_3', {'MoERoutingMode': 'topology_counts'}, banks=(7, 14, 3))
-    write_config('exp4', 'dynamic_24', {'EnableDynamic': 'True', 'MoERoutingMode': 'topology_counts'})
+    write_config('exp4', 'static_best_4_14_6', {'MoERoutingMode': 'topology_counts'}, banks=STATIC_BEST_BANKS)
+    write_config('exp4', 'dynamic_24', {'EnableDynamic': 'True', 'MoERoutingMode': 'topology_counts'}, banks=STATIC_BEST_BANKS)
 
     # Exp5: canonical 2x2 ablation.
     copy_topology('exp5', 'topologies/MoE/MoE.csv', 'modse_moe_8e.csv')
@@ -143,7 +152,7 @@ def main():
             'EnableChunkPrefetch': prefetch,
             'ChunkPrefetchWindow': 1 if prefetch else 0,
             'MoERoutingMode': 'topology_counts',
-        })
+        }, banks=STATIC_BEST_BANKS)
 
     # Exp6: window sweep plus ChunkSizeBytes x window matrix.
     copy_topology('exp6', 'topologies/MoE/MoE.csv', 'modse_moe_8e.csv')
@@ -152,56 +161,62 @@ def main():
             'EnableDynamic': 'True', 'EnableChunkPrefetch': window > 0,
             'ChunkPrefetchWindow': window, 'ChunkSizeBytes': 0,
             'MoERoutingMode': 'topology_counts',
-        })
+        }, banks=STATIC_BEST_BANKS)
     for chunk_size in (4096, 8192, 16384, 32768):
         for window in (1, 2, 4, 8):
             write_config('exp6', f'chunk_{chunk_size}_window_{window}', {
                 'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
                 'ChunkPrefetchWindow': window, 'ChunkSizeBytes': chunk_size,
                 'MoERoutingMode': 'topology_counts',
-            })
+            }, banks=STATIC_BEST_BANKS)
 
     # Exp7: controlled 4/8/16-expert topologies and robustness sweeps.
     for experts in (4, 8, 16):
         write_expert_topology(TOPOLOGY_ROOT / 'exp7' / f'moe_{experts}e.csv', experts)
         write_config('exp7', f'experts_{experts}', {
             'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
+            'EnableRoutedTokenAwareTrace': 'True',
             'ChunkPrefetchWindow': 1, 'NumGPUs': 2,
             'ExpertsPerGPU': experts // 2, 'MoERoutingMode': 'balanced',
             'MoETokens': 256,
-        })
+        }, banks=STATIC_BEST_BANKS)
     for top_k in (1, 2):
         write_config('exp7', f'topk_{top_k}', {
             'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
+            'EnableRoutedTokenAwareTrace': 'True',
             'ChunkPrefetchWindow': 1, 'TopK': top_k,
             'MoERoutingMode': 'balanced', 'MoETokens': 256,
-        })
+        }, banks=STATIC_BEST_BANKS)
     for tokens in (32, 128, 256, 512):
         write_config('exp7', f'tokens_{tokens}', {
             'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
+            'EnableRoutedTokenAwareTrace': 'True',
             'ChunkPrefetchWindow': 1, 'MoERoutingMode': 'balanced',
             'MoETokens': tokens,
-        })
+        }, banks=STATIC_BEST_BANKS)
     write_config('exp7', 'routing_balanced', {
         'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
+        'EnableRoutedTokenAwareTrace': 'True',
         'ChunkPrefetchWindow': 1, 'MoERoutingMode': 'balanced', 'MoETokens': 256,
-    })
+    }, banks=STATIC_BEST_BANKS)
     for skew in (0.5, 1.0, 2.0, 4.0):
         for seed in range(40, 45):
             skew_name = str(skew).replace('.', 'p')
             write_config('exp7', f'routing_skew_{skew_name}_seed_{seed}', {
                 'EnableDynamic': 'True', 'EnableChunkPrefetch': 'True',
+                'EnableRoutedTokenAwareTrace': 'True',
                 'ChunkPrefetchWindow': 1, 'MoERoutingMode': 'seeded_skewed',
                 'MoETokens': 256, 'RoutingSkewFactor': skew, 'RoutingSeed': seed,
-            })
+            }, banks=STATIC_BEST_BANKS)
 
     readme = OUTPUT_ROOT / 'README.md'
     readme.write_text(
-        '# DATE1 outputs\n\n'
-        'Run a group with `python3 run_date1_experiments.py --exp expN`.\n'
-        'Use `--variant NAME` for one config and `--dry-run` to inspect commands.\n'
-        'The config run_name creates the variant subdirectory.\n'
-        'The checked-in `.gitkeep` files preserve the expected output hierarchy.\n',
+        '# DATE1 实验输出目录\n\n'
+        '运行完整实验组：\n\n'
+        '```bash\npython3 run_date1_experiments.py --exp expN\n```\n\n'
+        '使用 `--variant NAME` 只运行一个配置方案，使用 `--dry-run` 只查看命令。\n\n'
+        '每份配置中的 `run_name` 会创建 `outputs/DATE1/expN/方案名称/` 输出目录。\n\n'
+        '目录中的 `.gitkeep` 文件用于在尚未运行实验时保留预期的输出层次。\n',
         encoding='utf-8',
     )
 

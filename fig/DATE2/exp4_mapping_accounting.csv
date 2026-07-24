@@ -1,0 +1,7 @@
+,work_cycles,work_cycles,work_cycles,hidden_cycles,hidden_cycles,hidden_cycles,exposed_cycles,exposed_cycles,exposed_cycles
+baseline,Dynamic-NaivePF,MemDomain-Raw,MemDomain-Safe,Dynamic-NaivePF,MemDomain-Raw,MemDomain-Safe,Dynamic-NaivePF,MemDomain-Raw,MemDomain-Safe
+model,,,,,,,,,
+HMoE,224,224,2,195,224,2,29,0,0
+MoDSE,98,98,1,85,98,1,13,0,0
+Mixtral,192,192,2,132,192,2,60,0,0
+Switchtrans,144,144,2,126,144,2,18,0,0

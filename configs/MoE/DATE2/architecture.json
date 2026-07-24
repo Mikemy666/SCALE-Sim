@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "architecture": "Buckyball-MemDomain",
+  "simulation_scope": "target wmode AccPipe RMW architecture",
+  "physical_banks": {
+    "count": 30,
+    "width_bits": 128,
+    "entries": 128,
+    "capacity_bytes_per_bank": 2048,
+    "ports_per_bank": 1,
+    "bandwidth_bits_per_bank_per_cycle": 128
+  },
+  "static_baseline": {
+    "sp_banks": 15,
+    "acc_banks": 15,
+    "ia_banks": [0, 1, 2, 3, 4],
+    "weight_banks": [5, 6, 7, 8, 9],
+    "oa_banks": [10, 11, 12, 13, 14],
+    "acc_bank_range": [15, 29],
+    "acc_stripe_width": 4,
+    "acc_usable_banks": 12,
+    "acc_fragmentation_banks": 3,
+    "cross_pool_borrowing": false
+  },
+  "memdomain": {
+    "unified_physical_bank_pool": true,
+    "compiler_selects_col": true,
+    "hardware_selects_low_pressure_free_banks": true,
+    "mapping_stable_during_virtual_bank_lifetime": true,
+    "live_data_migration": false,
+    "mapping_overhead_cycles": 0,
+    "reported_scheme_name": "MemDomain",
+    "static_incumbent_in_search_space": true
+  },
+  "precision": {
+    "original_model": "FP32",
+    "ia": "INT8",
+    "weight": "INT8",
+    "accumulator": "INT32",
+    "oa": "INT8"
+  },
+  "tiling": {
+    "m": 16,
+    "n": 16,
+    "k": 16,
+    "pad_edge_tiles": true
+  },
+  "accpipe": {
+    "normal_write_wmode": 0,
+    "accumulate_write_wmode": 1,
+    "read_cycles": 1,
+    "int32_add_cycles": 1,
+    "write_cycles": 1,
+    "rmw_cycles": 3,
+    "atomic_bank_lock": true,
+    "same_bank_same_address_serial": true,
+    "different_banks_parallel": true
+  },
+  "requantization": {
+    "acc_read_cycles": 1,
+    "scale_round_clamp_cycles": 1,
+    "oa_write_cycles": 1,
+    "initiation_interval": 1,
+    "cycles_per_16x16_tile": 18,
+    "release_acc_after_oa_write": true
+  },
+  "offchip": {
+    "default_bandwidth_bits_per_cycle": 128,
+    "startup_cycles_per_burst": 20,
+    "bandwidth_sensitivity_bits_per_cycle": [64, 128, 256, 512],
+    "latency_sensitivity_cycles": [10, 20, 40, 80],
+    "burst_non_preemptive": true
+  },
+  "execution": {
+    "single_16x16_array": true,
+    "experts_compute_sequentially": true,
+    "cross_expert_weight_prefetch": true,
+    "weight_double_residency": true,
+    "compute_timing_source": "SCALE-Sim trace",
+    "completion_point": "last required OA off-chip writeback"
+  },
+  "compiler_objective_priority": [
+    "total_cycles",
+    "exposed_memory_stall_cycles",
+    "bank_conflicts",
+    "allocated_bank_count",
+    "stable_mapping_order"
+  ]
+}

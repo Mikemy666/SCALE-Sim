@@ -86,6 +86,7 @@ class simulator:
         self.ep_moe_routing_rows = []
         self.ep_moe_event_rows = []
         self.ep_moe_chunk_rows = []
+        self.ep_moe_routed_trace_rows = []
         self.ep_moe_blackbox_layer_ids = set()
 
         self.params_set_flag = True
@@ -385,6 +386,56 @@ class simulator:
             annotated.append(item)
 
         return annotated
+
+    def _apply_routed_token_aware_traces(self, plan):
+        """Scale detailed-GPU MoE GEMM M dimensions to routed token counts.
+
+        Routing is resolved before layer runners are constructed, so mutating M
+        here makes the native SCALE-Sim operand, compute, memory, bank, and
+        chunk traces all observe the same per-expert token count.
+        """
+        enabled = bool(self.conf.get_enable_routed_token_aware_trace())
+        detailed_gpu_id = int(self.conf.get_detailed_gpu_id())
+        layer_to_m = {}
+        rows = []
+
+        for group in plan:
+            if group['type'] != 'moe_group':
+                continue
+            for expert in group['experts']:
+                routed_tokens = int(expert.get('tokens_per_expert', 0))
+                is_active = bool(expert.get('is_active', False))
+                is_detailed = int(expert['gpu_id']) == detailed_gpu_id
+                for layer in expert['layers']:
+                    layer_id = int(layer['layer_id'])
+                    original_m = int(self.topo.get_layer_ifmap_dims(layer_id)[0])
+                    should_scale = enabled and is_detailed and is_active and routed_tokens > 0
+                    effective_m = routed_tokens if should_scale else original_m
+                    if should_scale:
+                        layer_to_m[layer_id] = effective_m
+                    rows.append({
+                        'MoEGroupID': int(group['group_id']),
+                        'ExpertID': int(expert['expert_id']),
+                        'GPUId': int(expert['gpu_id']),
+                        'LayerID': layer_id,
+                        'LayerName': str(layer['layer_name']),
+                        'IsActiveExpert': is_active,
+                        'IsDetailedGPU': is_detailed,
+                        'RoutingMode': str(expert.get('routing_policy', '')),
+                        'RoutedTokens': routed_tokens,
+                        'OriginalM': original_m,
+                        'EffectiveM': effective_m,
+                        'TraceScaled': bool(should_scale),
+                        'TraceMode': (
+                            'routed_token_aware_detailed' if should_scale
+                            else ('analytical_blackbox' if not is_detailed else 'fixed_detailed')
+                        ),
+                    })
+
+        if layer_to_m:
+            self.topo.set_gemm_m_values(layer_to_m)
+        self.ep_moe_routed_trace_rows = rows
+        return rows
 
     def _build_expert_chunk_plan(self, expert, layer_stats=None):
         """Create the per-expert compute-tile / weight-chunk plan.
@@ -1224,6 +1275,7 @@ class simulator:
         if self.conf.get_enable_ep_moe():
             self.ep_moe_execution_plan = self._build_ep_moe_execution_plan()
             self._validate_ep_moe_execution_plan(self.ep_moe_execution_plan)
+            self._apply_routed_token_aware_traces(self.ep_moe_execution_plan)
             self.ep_moe_groups = [
                 item for item in self.ep_moe_execution_plan
                 if item['type'] == 'moe_group'
@@ -1267,6 +1319,18 @@ class simulator:
 
         self.top_path = report_path
 
+        sweep_partial_path = None
+        sweep_partial_fields = [
+            'LayerID', 'IfmapBankNum', 'FilterBankNum', 'OfmapBankNum',
+            'AllocationRatio', 'TotalCycles', 'StallCycles',
+            'IfmapConflictDelay', 'FilterConflictDelay', 'OfmapConflictDelay',
+            'TotalConflictDelay',
+        ]
+        if self.conf.get_enable_bank_model() and self.conf.get_enable_dynamic():
+            sweep_partial_path = self.top_path + '/BANK_ALLOCATION_SWEEP_PARTIAL.csv'
+            with open(sweep_partial_path, 'w', newline='', encoding='utf-8') as partial_report:
+                csv.DictWriter(partial_report, fieldnames=sweep_partial_fields).writeheader()
+
         # 2. Run each layer
         # TODO: This is parallelizable
         for single_layer_obj in self.single_layer_sim_object_list:
@@ -1280,6 +1344,30 @@ class simulator:
                 print('\nRunning Layer ' + str(layer_id))
 
             single_layer_obj.run()
+
+            if sweep_partial_path is not None:
+                bank_items = single_layer_obj.get_bank_report_items()
+                sweep_rows = bank_items.get('allocation_sweep_rows', [])
+                if sweep_rows:
+                    with open(sweep_partial_path, 'a', newline='', encoding='utf-8') as partial_report:
+                        writer = csv.DictWriter(partial_report, fieldnames=sweep_partial_fields)
+                        for sweep_row in sweep_rows:
+                            ifmap_delay = int(sweep_row.get('ifmap_conflict_delay', 0))
+                            filter_delay = int(sweep_row.get('filter_conflict_delay', 0))
+                            ofmap_delay = int(sweep_row.get('ofmap_conflict_delay', 0))
+                            writer.writerow({
+                                'LayerID': int(layer_id),
+                                'IfmapBankNum': int(sweep_row.get('ifmap_banknum', 0)),
+                                'FilterBankNum': int(sweep_row.get('filter_banknum', 0)),
+                                'OfmapBankNum': int(sweep_row.get('ofmap_banknum', 0)),
+                                'AllocationRatio': sweep_row.get('allocation_ratio', ''),
+                                'TotalCycles': int(sweep_row.get('total_cycles', 0)),
+                                'StallCycles': int(sweep_row.get('stall_cycles', 0)),
+                                'IfmapConflictDelay': ifmap_delay,
+                                'FilterConflictDelay': filter_delay,
+                                'OfmapConflictDelay': ofmap_delay,
+                                'TotalConflictDelay': ifmap_delay + filter_delay + ofmap_delay,
+                            })
 
             if self.verbose:
                 comp_items = single_layer_obj.get_compute_report_items()
@@ -2070,6 +2158,7 @@ class simulator:
             ('RoutingFile', self.conf.get_routing_file()),
             ('RoutingSeed', self.conf.get_routing_seed()),
             ('RoutingSkewFactor', self.conf.get_routing_skew_factor()),
+            ('EnableRoutedTokenAwareTrace', self.conf.get_enable_routed_token_aware_trace()),
             ('MoEActiveExpertMode', self.conf.get_moe_active_expert_mode()),
             ('ActiveExpertIds', '|'.join([str(x) for x in self.conf.get_active_expert_ids()])),
             ('EnableChunkPrefetch', self.conf.get_enable_chunk_prefetch()),
@@ -2091,6 +2180,7 @@ class simulator:
             ('EnableDynamic', self.conf.get_enable_dynamic()),
             ('BankConflictPenalty', self.conf.get_bank_conflict_penalty()),
             ('EPBankAllocationReport', 'EP_MOE_BANK_ALLOCATION.csv'),
+            ('EPRoutedTraceReport', 'EP_MOE_ROUTED_TRACE.csv'),
         ]
 
         with open(config_report_name, 'w', encoding='utf-8') as config_report:
@@ -2303,6 +2393,18 @@ class simulator:
                     'ExecutionMode': 'analytical_blackbox' if is_blackbox else 'detailed_scalesim',
                     'DetailedSimulationExecuted': not is_blackbox,
                 })
+
+    def _write_ep_moe_routed_trace_report(self):
+        report_name = self.top_path + '/EP_MOE_ROUTED_TRACE.csv'
+        fields = [
+            'MoEGroupID', 'ExpertID', 'GPUId', 'LayerID', 'LayerName',
+            'IsActiveExpert', 'IsDetailedGPU', 'RoutingMode', 'RoutedTokens',
+            'OriginalM', 'EffectiveM', 'TraceScaled', 'TraceMode',
+        ]
+        with open(report_name, 'w', encoding='utf-8', newline='') as report:
+            writer = csv.DictWriter(report, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(self.ep_moe_routed_trace_rows)
 
     def _write_ep_moe_bank_allocation_report(self):
         bank_alloc_report_name = self.top_path + '/EP_MOE_BANK_ALLOCATION.csv'
@@ -2563,6 +2665,7 @@ class simulator:
 
         bank_model_report = None
         bank_utilization_report = None
+        bank_allocation_sweep_report = None
         if self.conf.get_enable_bank_model():
             bank_model_report_name = self.top_path + '/BANK_MODEL_REPORT.csv'
             bank_model_report = open(bank_model_report_name, 'w')
@@ -2591,6 +2694,21 @@ class simulator:
                 ],
             )
             bank_utilization_writer.writeheader()
+
+            bank_allocation_sweep_name = self.top_path + '/BANK_ALLOCATION_SWEEP_REPORT.csv'
+            bank_allocation_sweep_report = open(
+                bank_allocation_sweep_name, 'w', newline='', encoding='utf-8'
+            )
+            bank_allocation_sweep_writer = csv.DictWriter(
+                bank_allocation_sweep_report,
+                fieldnames=[
+                    'LayerID', 'IfmapBankNum', 'FilterBankNum', 'OfmapBankNum',
+                    'AllocationRatio', 'TotalCycles', 'StallCycles',
+                    'IfmapConflictDelay', 'FilterConflictDelay', 'OfmapConflictDelay',
+                    'TotalConflictDelay',
+                ],
+            )
+            bank_allocation_sweep_writer.writeheader()
 
         # Prefetch experiment report (always generated; zeros when disabled)
         prefetch_report_name = self.top_path + '/PREFETCH_REPORT.csv'
@@ -2717,6 +2835,24 @@ class simulator:
                                 'Utilization': float(per_bank_util.get(tensor_type, {}).get(bank_id, 0.0)),
                                 'ConflictCount': int(per_bank_conflicts.get(tensor_type, {}).get(bank_id, 0)),
                             })
+                if bank_allocation_sweep_report is not None:
+                    for sweep_row in bank_items.get('allocation_sweep_rows', []):
+                        ifmap_delay = int(sweep_row.get('ifmap_conflict_delay', 0))
+                        filter_delay = int(sweep_row.get('filter_conflict_delay', 0))
+                        ofmap_delay = int(sweep_row.get('ofmap_conflict_delay', 0))
+                        bank_allocation_sweep_writer.writerow({
+                            'LayerID': int(lid),
+                            'IfmapBankNum': int(sweep_row.get('ifmap_banknum', 0)),
+                            'FilterBankNum': int(sweep_row.get('filter_banknum', 0)),
+                            'OfmapBankNum': int(sweep_row.get('ofmap_banknum', 0)),
+                            'AllocationRatio': sweep_row.get('allocation_ratio', ''),
+                            'TotalCycles': int(sweep_row.get('total_cycles', 0)),
+                            'StallCycles': int(sweep_row.get('stall_cycles', 0)),
+                            'IfmapConflictDelay': ifmap_delay,
+                            'FilterConflictDelay': filter_delay,
+                            'OfmapConflictDelay': ofmap_delay,
+                            'TotalConflictDelay': ifmap_delay + filter_delay + ofmap_delay,
+                        })
                 log = str(lid) + ', '
                 log += ', '.join([
                     str(bank_items.get('EnableBankModel', False)),
@@ -2795,6 +2931,8 @@ class simulator:
             bank_model_report.close()
         if bank_utilization_report is not None:
             bank_utilization_report.close()
+        if bank_allocation_sweep_report is not None:
+            bank_allocation_sweep_report.close()
 
         if self.conf.get_enable_ep_moe():
             self._write_ep_moe_config_report()
@@ -2806,6 +2944,7 @@ class simulator:
             self._write_ep_moe_chunk_report()
             self._write_ep_moe_run_manifest()
             self._write_ep_moe_layer_execution_report()
+            self._write_ep_moe_routed_trace_report()
 
             ep_moe_report_name = self.top_path + '/EP_MOE_REPORT.csv'
             with open(ep_moe_report_name, 'w', encoding='utf-8') as ep_report:

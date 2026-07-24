@@ -1,0 +1,5 @@
+,static_cycles,dynamic_cycles,gain_percent,late_stall_reduction,conflict_reduction,contract_pass
+HMoE,191799,187789,2.1353753414736776,4039,17,True
+MoDSE,104245,103449,0.769461280437711,809,5,True
+Mixtral,171885,167728,2.478417437756364,4217,18,True
+Switchtrans,137648,137090,0.4070318768692127,544,4,True

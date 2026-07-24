@@ -1,6 +1,26 @@
 {
-  "purpose": "C2_exhaustive_static_bank_ownership",
+  "purpose": "C2_exhaustive_static_SP_ownership",
   "topology": "topologies/MoE/DATE2/exp2/MoDSE.csv",
-  "bank_total": 24,
-  "positive_partitions": 253
+  "sp_bank_total": 15,
+  "acc_bank_total": 15,
+  "positive_partitions": 91,
+  "precision": {
+    "original_model_format": "FP32",
+    "compute_format": "INT8xINT8_INT32",
+    "ia_bytes_per_element": 1,
+    "weight_bytes_per_element": 1,
+    "accumulator_bytes_per_element": 4,
+    "output_bytes_per_element": 1,
+    "accumulator_mode": "banked_rmw",
+    "spill_sensitivity": false
+  },
+  "hardware": {
+    "bank_count": 30,
+    "bank_width_bits": 128,
+    "bank_entries": 128,
+    "capacity_bytes": 61440,
+    "ports_per_bank": 1,
+    "bandwidth_bytes_per_cycle": 480,
+    "mapping_overhead_per_object": 0
+  }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -85,8 +86,10 @@ class StreamingResidencyEngine:
         plans: Iterable[StreamingLoadPlan],
         compute_requests: Iterable[UnifiedMemoryRequest] = (),
         pressure: Optional[Mapping[int, BankPressure]] = None,
+        dynamic_compute_mapping: bool = False,
     ) -> StreamingResidencyReport:
         plans = tuple(plans)
+        compute_requests = tuple(compute_requests)
         identifiers = [plan.chunk.chunk_id for plan in plans]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("streaming Chunk IDs must be unique")
@@ -106,6 +109,10 @@ class StreamingResidencyEngine:
         releases = []
         results = []
         occupancy_byte_cycles = 0
+        compute_remaining = Counter(
+            request.object_id for request in compute_requests
+        )
+        compute_mappings = {}
 
         def release_through(cycle: int) -> None:
             while releases and releases[0][0] <= cycle:
@@ -117,7 +124,67 @@ class StreamingResidencyEngine:
             cycle = key[0]
             release_through(cycle)
             if event_type == "compute":
-                session.submit(payload)
+                request = payload
+                mapped_id = f"{request.tensor_type}:{request.object_id}"
+                if mapped_id not in compute_mappings:
+                    group_size = request.bank_group_size or max(
+                        1, len(request.preferred_banks)
+                    )
+                    # Buckyball maps one live virtual Bank group exclusively
+                    # to its physical Banks. Claiming the complete group
+                    # capacity prevents unrelated vBanks from byte-packing
+                    # into the same pBank.
+                    per_bank = (
+                        self.mapping.resources.capacity_bytes
+                        // self.mapping.resources.bank_count
+                    )
+                    obj = VirtualMemoryObject(
+                        object_id=mapped_id,
+                        tensor_type=request.tensor_type,
+                        size_bytes=group_size * per_bank,
+                        bank_group_size=group_size,
+                    )
+                    candidates = (
+                        None if dynamic_compute_mapping
+                        else request.preferred_banks or None
+                    )
+                    try:
+                        compute_mappings[mapped_id] = self.mapping.allocate(
+                            obj, cycle, pressure, candidates
+                        )
+                    except MemoryError:
+                        # Capacity pressure is a scheduled wait, not a fatal
+                        # mapping failure reported to the paper.
+                        self.mapping.allocation_failures -= 1
+                        if not releases:
+                            raise MemoryError(
+                                f"compute allocation for {mapped_id} cannot make progress"
+                            )
+                        retry = max(cycle + 1, releases[0][0])
+                        retried = UnifiedMemoryRequest(
+                            request.request_id, retry, request.tensor_type,
+                            request.object_id, request.address,
+                            request.size_bytes, request.kind,
+                            request.preferred_banks, request.wmode,
+                            request.bank_group_size,
+                        )
+                        heapq.heappush(
+                            events,
+                            (session._order_key(retried), sequence,
+                             "compute", retried, None),
+                        )
+                        sequence += 1
+                        continue
+                mapped = self.mapping.make_request(
+                    request.request_id, mapped_id, cycle, request.address,
+                    request.size_bytes, request.kind, request.wmode,
+                )
+                service = session.submit(mapped)
+                compute_remaining[request.object_id] -= 1
+                if compute_remaining[request.object_id] == 0:
+                    heapq.heappush(
+                        releases, (service.completion_cycle, mapped_id)
+                    )
                 continue
 
             plan = payload
@@ -154,6 +221,7 @@ class StreamingResidencyEngine:
                     obj, cycle, pressure, plan.preferred_banks or None
                 )
             except MemoryError:
+                self.mapping.allocation_failures -= 1
                 if not releases:
                     raise MemoryError(
                         f"streaming allocation for {chunk.chunk_id} cannot make progress"
@@ -207,7 +275,8 @@ class StreamingResidencyEngine:
             ))
             occupancy_byte_cycles += chunk.size_bytes * (release - cycle)
 
-        release_through(max((item.release_cycle for item in results), default=0))
+        while releases:
+            release_through(releases[0][0])
         if self.mapping.statistics().occupied_bytes != 0:
             raise AssertionError("streaming execution leaked resident capacity")
         ordered_results = tuple(sorted(results, key=lambda item: item.chunk_id))

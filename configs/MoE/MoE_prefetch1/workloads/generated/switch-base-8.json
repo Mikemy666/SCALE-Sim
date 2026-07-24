@@ -1,0 +1,298 @@
+{
+  "chunks": [
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p0_c0",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 0,
+      "size_bytes": 768,
+      "tile_id": 0,
+      "use_cycle": 20
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p1_c1",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 768,
+      "size_bytes": 768,
+      "tile_id": 1,
+      "use_cycle": 28
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p0_c2",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 1536,
+      "size_bytes": 768,
+      "tile_id": 2,
+      "use_cycle": 36
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p1_c3",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 2304,
+      "size_bytes": 768,
+      "tile_id": 3,
+      "use_cycle": 44
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p0_c4",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 3072,
+      "size_bytes": 768,
+      "tile_id": 4,
+      "use_cycle": 52
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p1_c5",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 3840,
+      "size_bytes": 768,
+      "tile_id": 5,
+      "use_cycle": 60
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p0_c6",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 4608,
+      "size_bytes": 768,
+      "tile_id": 6,
+      "use_cycle": 68
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p1_c7",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 5376,
+      "size_bytes": 768,
+      "tile_id": 7,
+      "use_cycle": 76
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p0_c8",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 6144,
+      "size_bytes": 768,
+      "tile_id": 8,
+      "use_cycle": 84
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p1_c9",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 6912,
+      "size_bytes": 768,
+      "tile_id": 9,
+      "use_cycle": 92
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p0_c10",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 7680,
+      "size_bytes": 768,
+      "tile_id": 10,
+      "use_cycle": 100
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p1_c11",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 8448,
+      "size_bytes": 768,
+      "tile_id": 11,
+      "use_cycle": 108
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p0_c12",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 9216,
+      "size_bytes": 768,
+      "tile_id": 12,
+      "use_cycle": 116
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p1_c13",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 9984,
+      "size_bytes": 768,
+      "tile_id": 13,
+      "use_cycle": 124
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p0_c14",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 10752,
+      "size_bytes": 768,
+      "tile_id": 14,
+      "use_cycle": 132
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p1_c15",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 11520,
+      "size_bytes": 768,
+      "tile_id": 15,
+      "use_cycle": 140
+    }
+  ],
+  "compute_cycles": 256,
+  "compute_intervals": [
+    [
+      0,
+      256
+    ]
+  ],
+  "compute_requests": [
+    {
+      "address": 0,
+      "issue_cycle": 0,
+      "kind": "read",
+      "object_id": "ia",
+      "preferred_banks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "request_id": "compute_ia",
+      "size_bytes": 768,
+      "tensor_type": "ia"
+    },
+    {
+      "address": 0,
+      "issue_cycle": 128,
+      "kind": "write",
+      "object_id": "accumulator",
+      "preferred_banks": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "request_id": "compute_accumulator",
+      "size_bytes": 768,
+      "tensor_type": "accumulator"
+    }
+  ],
+  "experiment_id": "catalog-switch-base-8",
+  "hardware": {
+    "bandwidth_bytes_per_cycle": 384,
+    "bank_count": 24,
+    "capacity_bytes": 1572864,
+    "interleave_bytes": 64,
+    "ports_per_bank": 1,
+    "request_buffer_depth": 32
+  },
+  "model_provenance": {
+    "alignment": 4,
+    "architecture_class": "homogeneous",
+    "derived_workload": true,
+    "dimension_divisor": 64,
+    "model_id": "switch-base-8",
+    "original_hidden_size": 768,
+    "original_routed_expert_intermediate_sizes": [
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048
+    ],
+    "original_shared_expert_intermediate_sizes": [],
+    "original_top_k": 1,
+    "paper_scale_performance_claim": false,
+    "projection_count": 2,
+    "scaled_hidden_size": 12,
+    "scaled_routed_expert_intermediate_sizes": [
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32
+    ],
+    "scaled_shared_expert_intermediate_sizes": [],
+    "source_locator": "paper architecture plus official google/switch-base-8 configuration",
+    "source_title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+    "source_url": "https://arxiv.org/abs/2101.03961",
+    "streaming_fixed_capacity": true
+  },
+  "policy": {
+    "busy_threshold": 32,
+    "conflict_threshold": 4,
+    "mapping_overhead_per_object": 1,
+    "prefetch_window": 2,
+    "queue_threshold": 2,
+    "static_weight_banks": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "routing": {
+    "mode": "balanced",
+    "seed": 0,
+    "tokens": 32,
+    "top_k": 1
+  },
+  "workload_name": "switch-base-8"
+}

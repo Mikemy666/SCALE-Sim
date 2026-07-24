@@ -25,6 +25,7 @@ def write(path,rows):
 def export(config_path,output_dir):
     config=load_runner_config(Path(config_path)); output_dir=Path(output_dir); by_chunk={c.chunk_id:c for c in config.chunks}
     chunk_rows=[];bank_rows=[];request_rows=[];layer_acc=defaultdict(lambda:defaultdict(int));expert_acc=defaultdict(lambda:defaultdict(int)); selections=[]
+    compiler_rows=list(config.payload.get("compiler_bank_plans",()))
     static_results={
         Baseline.STATIC_NOPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NOPF),
         Baseline.STATIC_NAIVEPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NAIVEPF),
@@ -75,7 +76,7 @@ def export(config_path,output_dir):
                 "delta_cycles":dynamic_penalty-static_penalty,"contract_pass":dynamic_penalty<=static_penalty})
     prov=json.loads(Path(config_path).read_text()).get("topology_provenance",{}); counts=prov.get("token_counts",[])
     input_rows=[{"expert_id":i,"tokens":v,"top_k":prov.get("top_k",1),"routing_mode":prov.get("routing_mode",""),"routing_severity":prov.get("routing_severity","")} for i,v in enumerate(counts)]
-    write(output_dir/"CHUNK_REPORT.csv",chunk_rows);write(output_dir/"EXPERT_REPORT.csv",expert_rows);write(output_dir/"FFN_STAGE_REPORT.csv",layer_rows);write(output_dir/"LAYER_DOMINANCE_REPORT.csv",dominance_rows);write(output_dir/"BANK_REPORT.csv",bank_rows);write(output_dir/"REQUEST_REPORT.csv",request_rows);write(output_dir/"EXPERT_INPUT_REPORT.csv",input_rows);write(output_dir/"MEASURED_SELECTIONS.csv",selections)
+    write(output_dir/"CHUNK_REPORT.csv",chunk_rows);write(output_dir/"EXPERT_REPORT.csv",expert_rows);write(output_dir/"FFN_STAGE_REPORT.csv",layer_rows);write(output_dir/"LAYER_DOMINANCE_REPORT.csv",dominance_rows);write(output_dir/"BANK_REPORT.csv",bank_rows);write(output_dir/"REQUEST_REPORT.csv",request_rows);write(output_dir/"EXPERT_INPUT_REPORT.csv",input_rows);write(output_dir/"MEASURED_SELECTIONS.csv",selections);write(output_dir/"COMPILER_BANK_PLAN.csv",compiler_rows)
 
 if __name__=="__main__":
     import argparse

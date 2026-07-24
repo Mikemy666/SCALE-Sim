@@ -81,7 +81,9 @@ class UnifiedBankSessionTests(unittest.TestCase):
         compute = UnifiedMemoryRequest("compute", 0, "ia", "ia", 0, 16)
         report = engine.run([plan], [compute])
         self.assertEqual(len(report.memory_report.services), 2)
-        self.assertGreater(report.memory_report.total_queue_wait_cycles, 0)
+        # Exclusive Buckyball vBank ownership delays allocation instead of
+        # illegally byte-packing compute and prefetch objects into one pBank.
+        self.assertGreater(report.allocation_wait_cycles, 0)
 
 
 if __name__ == "__main__":

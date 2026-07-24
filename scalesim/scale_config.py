@@ -97,6 +97,7 @@ class scale_config:
         self.routing_file = ''
         self.routing_seed = 40
         self.routing_skew_factor = 1.0
+        self.enable_routed_token_aware_trace = False
         self.moe_active_expert_mode = 'all'
         self.active_expert_ids = ''
         self.enable_chunk_prefetch = False
@@ -109,6 +110,7 @@ class scale_config:
         self.enable_blackbox_background_pressure = False
         self.global_memory_bandwidth_bytes_per_cycle = 1024
         self.dynamic_bank_overhead = 'old_model'
+        self.dynamic_moe_only = False
         self.communication_model = 'latency_plus_bandwidth'
         self.precision_bytes = 2
         self.communication_latency_cycles = 0
@@ -210,6 +212,8 @@ class scale_config:
             self.routing_seed = config.getint(section, 'RoutingSeed')
         if config.has_option(section, 'RoutingSkewFactor'):
             self.routing_skew_factor = config.getfloat(section, 'RoutingSkewFactor')
+        if config.has_option(section, 'EnableRoutedTokenAwareTrace'):
+            self.enable_routed_token_aware_trace = config.getboolean(section, 'EnableRoutedTokenAwareTrace')
         if config.has_option(section, 'MoEActiveExpertMode'):
             self.moe_active_expert_mode = str(config.get(section, 'MoEActiveExpertMode')).strip()
         if config.has_option(section, 'ActiveExpertIds'):
@@ -232,6 +236,8 @@ class scale_config:
             self.global_memory_bandwidth_bytes_per_cycle = config.getint(section, 'GlobalMemoryBandwidthBytesPerCycle')
         if config.has_option(section, 'DynamicBankOverhead'):
             self.dynamic_bank_overhead = str(config.get(section, 'DynamicBankOverhead')).strip()
+        if config.has_option(section, 'DynamicMoEOnly'):
+            self.dynamic_moe_only = config.getboolean(section, 'DynamicMoEOnly')
         if config.has_option(section, 'CommunicationModel'):
             self.communication_model = str(config.get(section, 'CommunicationModel')).strip()
         if config.has_option(section, 'PrecisionBytes'):
@@ -579,6 +585,7 @@ class scale_config:
         config.set(section, 'RoutingFile', str(self.get_routing_file()))
         config.set(section, 'RoutingSeed', str(self.routing_seed))
         config.set(section, 'RoutingSkewFactor', str(self.routing_skew_factor))
+        config.set(section, 'EnableRoutedTokenAwareTrace', str(self.enable_routed_token_aware_trace))
         config.set(section, 'MoEActiveExpertMode', str(self.moe_active_expert_mode))
         config.set(section, 'ActiveExpertIds', str(self.active_expert_ids))
         config.set(section, 'EnableChunkPrefetch', str(self.enable_chunk_prefetch))
@@ -590,6 +597,7 @@ class scale_config:
         config.set(section, 'EnableBlackBoxBackgroundPressure', str(self.enable_blackbox_background_pressure))
         config.set(section, 'GlobalMemoryBandwidthBytesPerCycle', str(self.global_memory_bandwidth_bytes_per_cycle))
         config.set(section, 'DynamicBankOverhead', str(self.dynamic_bank_overhead))
+        config.set(section, 'DynamicMoEOnly', str(self.dynamic_moe_only))
         config.set(section, 'CommunicationModel', str(self.communication_model))
         config.set(section, 'PrecisionBytes', str(self.precision_bytes))
         config.set(section, 'CommunicationLatencyCycles', str(self.communication_latency_cycles))
@@ -1024,6 +1032,11 @@ class scale_config:
             return float(self.routing_skew_factor)
         return 1.0
 
+    def get_enable_routed_token_aware_trace(self):
+        if self.valid_conf_flag:
+            return bool(self.enable_routed_token_aware_trace)
+        return False
+
     def get_moe_active_expert_mode(self):
         if self.valid_conf_flag:
             return str(self.moe_active_expert_mode).lower().strip()
@@ -1070,6 +1083,11 @@ class scale_config:
         if self.valid_conf_flag:
             return str(self.blackbox_workload_mode)
         return 'analytical'
+
+    def get_dynamic_moe_only(self):
+        if self.valid_conf_flag:
+            return bool(self.dynamic_moe_only)
+        return False
 
     def get_blackbox_bandwidth_bytes_per_cycle(self):
         if self.valid_conf_flag:

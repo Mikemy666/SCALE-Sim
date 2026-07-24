@@ -7,13 +7,13 @@ from scalesim.memory.memdomain_runner import run_matrix_file
 
 ROOT=Path(__file__).resolve().parent
 CONFIG_ROOT=ROOT/"configs/MoE/DATE2"; OUTPUT_ROOT=ROOT/"outputs/DATE2"
-SUITES=("overall","ablation","window_chunk","robustness")
-EXP_TO_SUITE={"exp4":"overall","exp5":"ablation","exp6":"window_chunk","exp7":"robustness"}
+SUITES=("overall","window_chunk","robustness")
+EXP_TO_SUITE={"exp4":"overall","exp5":"window_chunk","exp6":"robustness"}
 
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--suite",choices=("all",)+SUITES,default="all")
-    parser.add_argument("--exp",choices=tuple(f"exp{i}" for i in range(1,8)))
+    parser.add_argument("--exp",choices=("exp1","exp2","exp3","exp4","exp5","exp6"))
     parser.add_argument("--variant")
     parser.add_argument("--dry-run",action="store_true")
     args=parser.parse_args()
@@ -54,8 +54,20 @@ def main():
             assert oracle.total_cycles==min(row.total_cycles for row in rows)
             payload=json.loads(config.read_text(encoding="utf-8"))
             for row in rows:
+                # Raw and Oracle remain internal diagnostics.  The paper
+                # reports one implementable final scheme, "MemDomain", whose
+                # compiler search contains the fixed incumbent.
+                if row.baseline in (
+                    Baseline.MEMDOMAIN_RAW.value, Baseline.ORACLE.value
+                ):
+                    continue
+                public_baseline = (
+                    "MemDomain"
+                    if row.baseline == Baseline.MEMDOMAIN_SAFE.value
+                    else row.baseline
+                )
                 summary.append({"suite":suite,"variant":config.stem,"workload":row.workload_name,
-                    "baseline":row.baseline,"total_cycles":row.total_cycles,
+                    "baseline":public_baseline,"total_cycles":row.total_cycles,
                     "normalized_cycles":row.total_cycles/static.total_cycles,
                     "speedup":static.total_cycles/row.total_cycles,
                     "memory_stall_cycles":row.total_cycles-row.compute_cycles,

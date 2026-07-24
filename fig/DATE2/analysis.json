@@ -76,6 +76,22 @@
       "safe_speedup": 1.475749008954941,
       "communication_stall": 0
     },
+    "routing_high_seed40": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "routing_high_seed41": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "routing_high_seed42": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
+    "routing_high_seed43": {
+      "safe_speedup": 1.475749008954941,
+      "communication_stall": 0
+    },
     "routing_light": {
       "safe_speedup": 1.475749008954941,
       "communication_stall": 0

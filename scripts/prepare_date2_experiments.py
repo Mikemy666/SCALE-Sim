@@ -8,11 +8,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scalesim.memory.moe_workload_catalog import write_runner_payload
 from scalesim.memory.topology_workload import generate_topology_runner_payload
+from scalesim.memory.date2_network_contract import validate_network_set
 CONFIG_ROOT = ROOT / "configs/MoE/DATE2"
 TOPOLOGY_ROOT = ROOT / "topologies/MoE/DATE2"
 OUTPUT_ROOT = ROOT / "outputs/DATE2"
 MODELS = (("HMoE", "heterogeneous"), ("Mixtral", "homogeneous"),
           ("MoDSE", "heterogeneous"), ("Switchtrans", "homogeneous"))
+UNIFORM_DIMENSION_DIVISOR = 4
 
 def balanced(tokens, experts, top_k=1):
     total = tokens * top_k
@@ -45,12 +47,30 @@ def variant_topology(path, source, counts):
     with path.open("w", newline="", encoding="utf-8") as stream:
         csv.writer(stream).writerows(rows)
 
+def uniformly_scale_topology(path, source):
+    rows=[]
+    with source.open(newline="",encoding="utf-8") as stream:
+        for row in csv.reader(stream):
+            if row and row[0] and row[0]!="Layer":
+                # M carries routed token counts and is intentionally unchanged.
+                # Router N is the expert count; every matrix dimension is
+                # divided by the same factor then aligned to the 16x16 array.
+                for index in (2,3):
+                    if index==2 and row[0]=="Router_logits":
+                        continue
+                    value=int(row[index])
+                    row[index]=str(max(16,((value//UNIFORM_DIMENSION_DIVISOR+15)//16)*16))
+            rows.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    with path.open("w",newline="",encoding="utf-8") as stream:
+        csv.writer(stream).writerows(rows)
+
 def save(suite, name, payload):
     payload = deepcopy(payload)
-    if suite in {"overall", "ablation", "robustness"}:
+    if suite in {"overall", "robustness"}:
         payload["policy"].update({
             "adaptive_prefetch": True,
-            "max_prefetch_window": 8,
+            "max_prefetch_window": 32,
             "max_prefetch_capacity_fraction": 0.25,
         })
     payload.update(experiment_id=f"date2-{suite}-{name}", date2_suite=suite,
@@ -64,24 +84,25 @@ def main():
     for model, kind in MODELS:
         target = TOPOLOGY_ROOT / "models" / f"{model}.csv"
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / f"topologies/MoE/{model}.csv", target)
+        uniformly_scale_topology(
+            target, ROOT / f"topologies/MoE/{model}.csv"
+        )
         bases[model] = generate_topology_runner_payload(target, kind)
         save("overall", model, bases[model])
+    compatibility = validate_network_set([
+        TOPOLOGY_ROOT / "models" / f"{model}.csv" for model, _ in MODELS
+    ])
 
-    payload = deepcopy(bases["MoDSE"])
-    payload["ablation_order"] = ["Static-NoPF", "Dynamic-NoPF", "Static-NaivePF",
-                                 "Dynamic-NaivePF", "MemDomain-Raw", "MemDomain-Safe"]
-    save("ablation", "MoDSE_components", payload)
-
-    for window in (0,1,2,4,8):
+    for window in (0,1,2,4,8,16,32,64):
         for tiles in (1,2,4,8):
-            payload = generate_topology_runner_payload(TOPOLOGY_ROOT/"models/MoDSE.csv",
-                                                       "heterogeneous", tiles*16*1024)
+            payload = generate_topology_runner_payload(
+                TOPOLOGY_ROOT/"models/MoDSE.csv", "heterogeneous", tiles * 256
+            )
             payload["policy"]["prefetch_window"] = window
             payload["sweep"] = {"prefetch_window": window, "chunk_tiles": tiles}
             save("window_chunk", f"w{window}_c{tiles}", payload)
 
-    source = ROOT / "topologies/MoE/Mixtral.csv"
+    source = TOPOLOGY_ROOT / "models/Mixtral.csv"
     for top_k in (1,2):
         topo = TOPOLOGY_ROOT/"robustness"/f"topk{top_k}.csv"
         variant_topology(topo, source, balanced(256,8,top_k))
@@ -110,14 +131,14 @@ def main():
         save("robustness", f"ep_{gpus}gpu", generate_topology_runner_payload(
             TOPOLOGY_ROOT/"models/MoDSE.csv","heterogeneous",num_gpus=gpus))
 
-    widths=[1728,192,1536,384,1152,768,960,960]
+    widths=[432,48,384,96,288,192,240,240]
     for experts in (4,8,16):
         counts=balanced(256,experts); topo=TOPOLOGY_ROOT/"robustness"/f"experts_{experts}.csv"
         lines=["Layer,M,N,K,"]
         for expert in range(experts):
             width=widths[expert%8]
-            lines += [f"MoE-E{expert}-FF1,{counts[expert]},{width},384,",
-                      f"MoE-E{expert}-FF2,{counts[expert]},384,{width},"]
+            lines += [f"MoE-E{expert}-FF1,{counts[expert]},{width},96,",
+                      f"MoE-E{expert}-FF2,{counts[expert]},96,{width},"]
         topo.parent.mkdir(parents=True,exist_ok=True); topo.write_text("\n".join(lines)+"\n",encoding="utf-8")
         save("robustness",f"experts_{experts}",generate_topology_runner_payload(topo,"heterogeneous"))
 
@@ -125,12 +146,49 @@ def main():
     from scripts.DATE2.run_date2_characterization import prepare as prepare_characterization
     prepare_characterization()
     suites={s:len(list((CONFIG_ROOT/s).glob("*.json"))) for s in
-            ("overall","ablation","window_chunk","robustness")}
+            ("overall","window_chunk","robustness")}
     suites["characterization"]=3
-    manifest={"schema_version":1,"simulator_only":True,"rtl_dc_out_of_scope":True,
+    manifest={"schema_version":2,"simulator_only":True,"rtl_dc_out_of_scope":True,
               "config_root":str(CONFIG_ROOT),"topology_root":str(TOPOLOGY_ROOT),
-              "output_root":str(OUTPUT_ROOT),"suites":suites}
+              "output_root":str(OUTPUT_ROOT),"suites":suites,
+              "paper_experiments":{
+                  "exp1":"layer_characterization",
+                  "exp2":"static_bank_sweep",
+                  "exp3":"naive_prefetch_interference",
+                  "exp4":"overall",
+                  "exp5":"window_chunk",
+                  "exp6":"robustness",
+              },
+              "precision":{
+                  "original_model_format":"FP32",
+                  "compute_format":"INT8xINT8_INT32",
+                  "ia_bytes_per_element":1,
+                  "weight_bytes_per_element":1,
+                  "accumulator_bytes_per_element":4,
+                  "output_bytes_per_element":1,
+                  "accumulator_mode":"banked_rmw",
+                  "bank_count":30,
+                  "bank_width_bits":128,
+                  "bank_entries":128,
+                  "tile_size":16,
+              },
+              "network_compatibility":{
+                  name:{
+                      "hidden_size":item.hidden_size,
+                      "total_tokens":item.total_tokens,
+                      "expert_count":item.expert_count,
+                      "padded_rows":item.padded_rows,
+                      "homogeneous_expert_weights":
+                          item.homogeneous_expert_weights,
+                  } for name,item in compatibility.items()
+              },
+              "uniform_dimension_divisor":UNIFORM_DIMENSION_DIVISOR}
     (CONFIG_ROOT/"manifest.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
-    (OUTPUT_ROOT/"README.md").write_text("# DATE2 outputs\n\nRun `python3 run_date2_experiments.py --suite all`.\n",encoding="utf-8")
+    (OUTPUT_ROOT/"README.md").write_text(
+        "# DATE2 outputs\n\n"
+        "Experiments are numbered exp1-exp6; exp5 is Window x Chunk and "
+        "exp6 is Robustness.\n\n"
+        "Run `python3 run_date2_experiments.py --suite all`.\n",
+        encoding="utf-8")
 
 if __name__ == "__main__": main()

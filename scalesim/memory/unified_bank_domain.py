@@ -28,6 +28,10 @@ class UnifiedMemoryRequest:
     size_bytes: int
     kind: str = "read"
     preferred_banks: Tuple[int, ...] = field(default_factory=tuple)
+    # Buckyball target semantics: wmode=0 is a normal overwrite and wmode=1
+    # is an atomic AccPipe read-add-write transaction.
+    wmode: int = 0
+    bank_group_size: int = 0
 
     def __post_init__(self) -> None:
         if not self.request_id or not self.object_id:
@@ -40,6 +44,14 @@ class UnifiedMemoryRequest:
             raise ValueError(f"unsupported tensor type: {self.tensor_type}")
         if self.kind not in REQUEST_KINDS:
             raise ValueError(f"unsupported request kind: {self.kind}")
+        if self.wmode not in (0, 1):
+            raise ValueError("wmode must be 0 (overwrite) or 1 (accumulate)")
+        if self.wmode == 1 and not (
+            self.tensor_type == "accumulator" and self.kind == "write"
+        ):
+            raise ValueError("wmode=1 is valid only for accumulator writes")
+        if self.bank_group_size < 0:
+            raise ValueError("bank_group_size must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -94,6 +106,21 @@ class UnifiedBankDomain:
 
     def _beats(self, request: UnifiedMemoryRequest) -> Tuple[Tuple[int, int], ...]:
         allowed = self._validate_preferred_banks(request)
+        if (
+            self.resources.ports_per_bank == 1
+            and request.address % self.interleave_bytes == 0
+            and request.size_bytes % self.interleave_bytes == 0
+        ):
+            lines = request.size_bytes // self.interleave_bytes
+            first = (request.address // self.interleave_bytes) % len(allowed)
+            quotient, remainder = divmod(lines, len(allowed))
+            grouped = {}
+            for offset, bank in enumerate(allowed):
+                extra = int((offset - first) % len(allowed) < remainder)
+                count = quotient + extra
+                if count:
+                    grouped[bank] = count * self.interleave_bytes
+            return tuple(sorted(grouped.items()))
         beats = []
         remaining = int(request.size_bytes)
         cursor = int(request.address)
@@ -105,7 +132,52 @@ class UnifiedBankDomain:
             beats.append((bank, beat_bytes))
             cursor += beat_bytes
             remaining -= beat_bytes
+        if self.resources.ports_per_bank == 1:
+            # With one port per Bank, all beats from one request are serialized
+            # exactly as one run. Compressing the run preserves completion and
+            # port occupancy while avoiding millions of Python event objects.
+            grouped: Dict[int, int] = {}
+            for bank, beat_bytes in beats:
+                grouped[bank] = grouped.get(bank, 0) + beat_bytes
+            return tuple(sorted(grouped.items()))
         return tuple(beats)
+
+    def _beat_duration(self, request: UnifiedMemoryRequest, beat_bytes: int) -> int:
+        transfer = max(
+            1, int(ceil(float(beat_bytes) / self.per_bank_bandwidth))
+        )
+        # Confirmed architecture contract: synchronous SRAM read (1), INT32
+        # add (1), and SRAM writeback (1). The single Bank port remains locked
+        # for the complete atomic RMW.
+        return 3 * transfer if request.wmode == 1 else transfer
+
+    def _logical_beats(self, request: UnifiedMemoryRequest, beat_bytes: int) -> int:
+        return int(ceil(float(beat_bytes) / self.interleave_bytes))
+
+    def _ideal_request_duration(self, request: UnifiedMemoryRequest) -> int:
+        beats = self._beats(request)
+        per_bank = {}
+        for bank, beat_bytes in beats:
+            per_bank[bank] = per_bank.get(bank, 0) + self._beat_duration(
+                request, beat_bytes
+            )
+        return max(per_bank.values(), default=0)
+
+    def _atomic_runs(
+        self, request: UnifiedMemoryRequest
+    ) -> Optional[Mapping[int, int]]:
+        """Return beat counts for the common 4-Bank ACC tile fast path."""
+        if (
+            request.wmode != 1
+            or self.resources.ports_per_bank != 1
+            or request.address % self.interleave_bytes
+            or request.size_bytes % self.interleave_bytes
+        ):
+            return None
+        counts: Dict[int, int] = {}
+        for bank, _ in self._beats(request):
+            counts[bank] = counts.get(bank, 0) + 1
+        return counts
 
     def simulate(self, requests: Iterable[UnifiedMemoryRequest]) -> UnifiedDomainReport:
         priority = {"read": 0, "write": 0, "prefetch": 1}
@@ -153,7 +225,7 @@ class UnifiedBankDomain:
                 )
                 ready = bank_ports[bank][port_index]
                 start = max(arrival, ready)
-                duration = max(1, int(ceil(float(beat_bytes) / self.per_bank_bandwidth)))
+                duration = self._beat_duration(request, beat_bytes)
                 completion = start + duration
                 bank_ports[bank][port_index] = completion
                 outstanding[bank].append(completion)
@@ -162,7 +234,7 @@ class UnifiedBankDomain:
                 )
                 wait = start - request.issue_cycle
 
-                accesses[bank] += 1
+                accesses[bank] += self._logical_beats(request, beat_bytes)
                 busy[bank] += duration
                 queue_wait[bank] += wait
                 if wait > 0:
@@ -177,14 +249,18 @@ class UnifiedBankDomain:
                 start_cycle=min(starts),
                 completion_cycle=max(completions),
                 queue_wait_cycles=max(completions) - request.issue_cycle
-                - max(1, int(ceil(float(request.size_bytes) / self.resources.bandwidth_bytes_per_cycle))),
+                - self._ideal_request_duration(request),
                 banks=tuple(sorted(set(used_banks))),
-                beat_count=len(beats),
+                beat_count=sum(
+                    self._logical_beats(request, size) for _, size in beats
+                ),
             )
             services.append(service)
             per_tensor[request.tensor_type] += 1
             total_bytes += request.size_bytes
-            total_beats += len(beats)
+            total_beats += sum(
+                self._logical_beats(request, size) for _, size in beats
+            )
 
         total_wait = sum(queue_wait.values())
         finish = max((service.completion_cycle for service in services), default=0)
@@ -262,9 +338,7 @@ class UnifiedBankSession:
             )
             ready = self.bank_ports[bank][port_index]
             start = max(arrival, ready)
-            duration = max(
-                1, int(ceil(float(beat_bytes) / self.domain.per_bank_bandwidth))
-            )
+            duration = self.domain._beat_duration(request, beat_bytes)
             completion = start + duration
             self.bank_ports[bank][port_index] = completion
             self.outstanding[bank].append(completion)
@@ -272,7 +346,9 @@ class UnifiedBankSession:
                 self.max_queue_depth[bank], len(self.outstanding[bank])
             )
             wait = start - request.issue_cycle
-            self.accesses[bank] += 1
+            self.accesses[bank] += self.domain._logical_beats(
+                request, beat_bytes
+            )
             self.busy[bank] += duration
             self.queue_wait[bank] += wait
             if wait > 0:
@@ -287,17 +363,19 @@ class UnifiedBankSession:
             start_cycle=min(starts),
             completion_cycle=max(completions),
             queue_wait_cycles=max(completions) - request.issue_cycle
-            - max(1, int(ceil(
-                float(request.size_bytes)
-                / self.domain.resources.bandwidth_bytes_per_cycle
-            ))),
+            - self.domain._ideal_request_duration(request),
             banks=tuple(sorted(set(used_banks))),
-            beat_count=len(beats),
+            beat_count=sum(
+                self.domain._logical_beats(request, size)
+                for _, size in beats
+            ),
         )
         self.services.append(service)
         self.per_tensor[request.tensor_type] += 1
         self.total_bytes += request.size_bytes
-        self.total_beats += len(beats)
+        self.total_beats += sum(
+            self.domain._logical_beats(request, size) for _, size in beats
+        )
         return service
 
     def pressure(self) -> Mapping[int, Mapping[str, int]]:

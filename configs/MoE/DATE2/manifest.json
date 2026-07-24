@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "simulator_only": true,
   "rtl_dc_out_of_scope": true,
   "config_root": "/home/MikeNotFound/code/SCALE-Sim/configs/MoE/DATE2",
@@ -7,9 +7,60 @@
   "output_root": "/home/MikeNotFound/code/SCALE-Sim/outputs/DATE2",
   "suites": {
     "overall": 4,
-    "ablation": 1,
-    "window_chunk": 20,
+    "window_chunk": 32,
     "robustness": 26,
     "characterization": 3
-  }
+  },
+  "paper_experiments": {
+    "exp1": "layer_characterization",
+    "exp2": "static_bank_sweep",
+    "exp3": "naive_prefetch_interference",
+    "exp4": "overall",
+    "exp5": "window_chunk",
+    "exp6": "robustness"
+  },
+  "precision": {
+    "original_model_format": "FP32",
+    "compute_format": "INT8xINT8_INT32",
+    "ia_bytes_per_element": 1,
+    "weight_bytes_per_element": 1,
+    "accumulator_bytes_per_element": 4,
+    "output_bytes_per_element": 1,
+    "accumulator_mode": "banked_rmw",
+    "bank_count": 30,
+    "bank_width_bits": 128,
+    "bank_entries": 128,
+    "tile_size": 16
+  },
+  "network_compatibility": {
+    "HMoE": {
+      "hidden_size": 96,
+      "total_tokens": 256,
+      "expert_count": 8,
+      "padded_rows": 64,
+      "homogeneous_expert_weights": false
+    },
+    "Mixtral": {
+      "hidden_size": 96,
+      "total_tokens": 256,
+      "expert_count": 8,
+      "padded_rows": 64,
+      "homogeneous_expert_weights": true
+    },
+    "MoDSE": {
+      "hidden_size": 96,
+      "total_tokens": 256,
+      "expert_count": 8,
+      "padded_rows": 64,
+      "homogeneous_expert_weights": false
+    },
+    "Switchtrans": {
+      "hidden_size": 96,
+      "total_tokens": 256,
+      "expert_count": 8,
+      "padded_rows": 64,
+      "homogeneous_expert_weights": true
+    }
+  },
+  "uniform_dimension_divisor": 4
 }

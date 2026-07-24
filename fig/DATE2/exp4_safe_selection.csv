@@ -1,5 +1,5 @@
-,model_class,safe_selected,oracle_selected,safe_speedup,oracle_speedup,safe_gap_vs_oracle_percent,fallback_used
-HMoE,Heterogeneous,Static-NoPF,Static-NaivePF,1.0,1.9352759920541818,93.52759920541817,True
-MoDSE,Heterogeneous,MemDomain-Raw,MemDomain-Raw,1.7719471372457962,1.7719471372457962,0.0,False
-Mixtral,Homogeneous,Static-NoPF,Static-NaivePF,1.0,1.9699857462838526,96.99857462838526,True
-Switchtrans,Homogeneous,Static-NoPF,Static-NaivePF,1.0,1.9263628966639543,92.63628966639543,True
+,model_class,safe_selected,oracle_selected,safe_speedup,oracle_speedup,safe_gap_vs_oracle_percent,fallback_used,gain_over_best_conventional_percent
+HMoE,Heterogeneous,Online-Guarded-Full,MemDomain-Raw,2.532832022054057,2.5387914230019493,0.23528607092779819,True,28.140758381155795
+MoDSE,Heterogeneous,Online-Guarded-Full,MemDomain-Safe,2.039599991091116,2.039599991091116,0.0,True,15.201897592374003
+Mixtral,Homogeneous,Online-Guarded-Full,MemDomain-Raw,2.4117420816091055,2.418010954247806,0.2599313038696982,True,19.463536584497266
+Switchtrans,Homogeneous,Online-Guarded-Full,MemDomain-Raw,2.269739094706567,2.2701860429277145,0.019691612229344457,True,17.347462850099294

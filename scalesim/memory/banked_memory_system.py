@@ -227,6 +227,7 @@ class banked_memory_system:
         self.ofmap_dram_writes = 0
 
         self.bank_report = {}
+        self.allocation_sweep_rows = []
 
         self.ifmap_model = None
         self.filter_model = None
@@ -749,6 +750,11 @@ class banked_memory_system:
         selected_sim = None
 
         if self.enable_dynamic:
+            if bool(getattr(self.config, 'get_dynamic_moe_only', lambda: False)()):
+                layer_name = str(self.topo.get_layer_names()[int(self.layer_id)])
+                if not layer_name.startswith('MoE-'):
+                    self.allocation_sweep_rows = []
+                    return selected_counts, selected_sim
             best_counts, best_sim = self._find_oracle_best_allocation(
                 ifmap_demand_mat=ifmap_demand_mat,
                 filter_demand_mat=filter_demand_mat,
@@ -804,6 +810,7 @@ class banked_memory_system:
 
         best_counts = None
         best_sim = None
+        self.allocation_sweep_rows = []
 
         for counts in self._iter_allocation_candidates():
             sim_result = self._simulate_with_counts(
@@ -813,6 +820,19 @@ class banked_memory_system:
                 ofmap_demand_mat=ofmap_demand_mat,
                 use_allocation_bases=True,
             )
+            self.allocation_sweep_rows.append({
+                "ifmap_banknum": int(counts["ifmap"]),
+                "filter_banknum": int(counts["filter"]),
+                "ofmap_banknum": int(counts["ofmap"]),
+                "allocation_ratio": (
+                    f'{int(counts["ifmap"])}:{int(counts["filter"])}:{int(counts["ofmap"])}'
+                ),
+                "total_cycles": int(sim_result["total_cycles"]),
+                "stall_cycles": int(sim_result["stall_cycles"]),
+                "ifmap_conflict_delay": int(sim_result["ifmap_model"].total_conflict_delay),
+                "filter_conflict_delay": int(sim_result["filter_model"].total_conflict_delay),
+                "ofmap_conflict_delay": int(sim_result["ofmap_model"].total_conflict_delay),
+            })
 
             if self._is_sim_result_better(sim_result, best_sim):
                 best_counts = dict(counts)
@@ -1134,6 +1154,7 @@ class banked_memory_system:
                 "filter": dict(self.filter_model.per_bank_conflict_count),
                 "ofmap": dict(self.ofmap_model.per_bank_conflict_count),
             },
+            "allocation_sweep_rows": [dict(row) for row in self.allocation_sweep_rows],
         }
 
     def get_bank_report_dict(self):

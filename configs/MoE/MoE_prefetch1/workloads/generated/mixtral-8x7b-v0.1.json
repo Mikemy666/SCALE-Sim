@@ -1,0 +1,650 @@
+{
+  "chunks": [
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p0_c0",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 0,
+      "size_bytes": 16384,
+      "tile_id": 0,
+      "use_cycle": 20
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p0_c1",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 16384,
+      "size_bytes": 12288,
+      "tile_id": 1,
+      "use_cycle": 28
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p1_c2",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 28672,
+      "size_bytes": 16384,
+      "tile_id": 2,
+      "use_cycle": 36
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p1_c3",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 45056,
+      "size_bytes": 12288,
+      "tile_id": 3,
+      "use_cycle": 44
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p2_c4",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 57344,
+      "size_bytes": 16384,
+      "tile_id": 4,
+      "use_cycle": 52
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e0_p2_c5",
+      "expert_id": 0,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 73728,
+      "size_bytes": 12288,
+      "tile_id": 5,
+      "use_cycle": 60
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p0_c6",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 86016,
+      "size_bytes": 16384,
+      "tile_id": 6,
+      "use_cycle": 68
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p0_c7",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 102400,
+      "size_bytes": 12288,
+      "tile_id": 7,
+      "use_cycle": 76
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p1_c8",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 114688,
+      "size_bytes": 16384,
+      "tile_id": 8,
+      "use_cycle": 84
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p1_c9",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 131072,
+      "size_bytes": 12288,
+      "tile_id": 9,
+      "use_cycle": 92
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p2_c10",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 143360,
+      "size_bytes": 16384,
+      "tile_id": 10,
+      "use_cycle": 100
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e1_p2_c11",
+      "expert_id": 1,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 159744,
+      "size_bytes": 12288,
+      "tile_id": 11,
+      "use_cycle": 108
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p0_c12",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 172032,
+      "size_bytes": 16384,
+      "tile_id": 12,
+      "use_cycle": 116
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p0_c13",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 188416,
+      "size_bytes": 12288,
+      "tile_id": 13,
+      "use_cycle": 124
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p1_c14",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 200704,
+      "size_bytes": 16384,
+      "tile_id": 14,
+      "use_cycle": 132
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p1_c15",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 217088,
+      "size_bytes": 12288,
+      "tile_id": 15,
+      "use_cycle": 140
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p2_c16",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 229376,
+      "size_bytes": 16384,
+      "tile_id": 16,
+      "use_cycle": 148
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e2_p2_c17",
+      "expert_id": 2,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 245760,
+      "size_bytes": 12288,
+      "tile_id": 17,
+      "use_cycle": 156
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p0_c18",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 258048,
+      "size_bytes": 16384,
+      "tile_id": 18,
+      "use_cycle": 164
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p0_c19",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 274432,
+      "size_bytes": 12288,
+      "tile_id": 19,
+      "use_cycle": 172
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p1_c20",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 286720,
+      "size_bytes": 16384,
+      "tile_id": 20,
+      "use_cycle": 180
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p1_c21",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 303104,
+      "size_bytes": 12288,
+      "tile_id": 21,
+      "use_cycle": 188
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p2_c22",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 315392,
+      "size_bytes": 16384,
+      "tile_id": 22,
+      "use_cycle": 196
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e3_p2_c23",
+      "expert_id": 3,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 331776,
+      "size_bytes": 12288,
+      "tile_id": 23,
+      "use_cycle": 204
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p0_c24",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 344064,
+      "size_bytes": 16384,
+      "tile_id": 24,
+      "use_cycle": 212
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p0_c25",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 360448,
+      "size_bytes": 12288,
+      "tile_id": 25,
+      "use_cycle": 220
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p1_c26",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 372736,
+      "size_bytes": 16384,
+      "tile_id": 26,
+      "use_cycle": 228
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p1_c27",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 389120,
+      "size_bytes": 12288,
+      "tile_id": 27,
+      "use_cycle": 236
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p2_c28",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 401408,
+      "size_bytes": 16384,
+      "tile_id": 28,
+      "use_cycle": 244
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e4_p2_c29",
+      "expert_id": 4,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 417792,
+      "size_bytes": 12288,
+      "tile_id": 29,
+      "use_cycle": 252
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p0_c30",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 430080,
+      "size_bytes": 16384,
+      "tile_id": 30,
+      "use_cycle": 260
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p0_c31",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 446464,
+      "size_bytes": 12288,
+      "tile_id": 31,
+      "use_cycle": 268
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p1_c32",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 458752,
+      "size_bytes": 16384,
+      "tile_id": 32,
+      "use_cycle": 276
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p1_c33",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 475136,
+      "size_bytes": 12288,
+      "tile_id": 33,
+      "use_cycle": 284
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p2_c34",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 487424,
+      "size_bytes": 16384,
+      "tile_id": 34,
+      "use_cycle": 292
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e5_p2_c35",
+      "expert_id": 5,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 503808,
+      "size_bytes": 12288,
+      "tile_id": 35,
+      "use_cycle": 300
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p0_c36",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 516096,
+      "size_bytes": 16384,
+      "tile_id": 36,
+      "use_cycle": 308
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p0_c37",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 532480,
+      "size_bytes": 12288,
+      "tile_id": 37,
+      "use_cycle": 316
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p1_c38",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 544768,
+      "size_bytes": 16384,
+      "tile_id": 38,
+      "use_cycle": 324
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p1_c39",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 561152,
+      "size_bytes": 12288,
+      "tile_id": 39,
+      "use_cycle": 332
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p2_c40",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 573440,
+      "size_bytes": 16384,
+      "tile_id": 40,
+      "use_cycle": 340
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e6_p2_c41",
+      "expert_id": 6,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 589824,
+      "size_bytes": 12288,
+      "tile_id": 41,
+      "use_cycle": 348
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p0_c42",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 602112,
+      "size_bytes": 16384,
+      "tile_id": 42,
+      "use_cycle": 356
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p0_c43",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 618496,
+      "size_bytes": 12288,
+      "tile_id": 43,
+      "use_cycle": 364
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p1_c44",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 630784,
+      "size_bytes": 16384,
+      "tile_id": 44,
+      "use_cycle": 372
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p1_c45",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 1,
+      "logical_address": 647168,
+      "size_bytes": 12288,
+      "tile_id": 45,
+      "use_cycle": 380
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p2_c46",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 659456,
+      "size_bytes": 16384,
+      "tile_id": 46,
+      "use_cycle": 388
+    },
+    {
+      "bank_group_size": 1,
+      "chunk_id": "routed_e7_p2_c47",
+      "expert_id": 7,
+      "expert_kind": "routed",
+      "ffn_part": 2,
+      "logical_address": 675840,
+      "size_bytes": 12288,
+      "tile_id": 47,
+      "use_cycle": 396
+    }
+  ],
+  "compute_cycles": 424,
+  "compute_intervals": [
+    [
+      0,
+      424
+    ]
+  ],
+  "compute_requests": [
+    {
+      "address": 0,
+      "issue_cycle": 0,
+      "kind": "read",
+      "object_id": "ia",
+      "preferred_banks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "request_id": "compute_ia",
+      "size_bytes": 4096,
+      "tensor_type": "ia"
+    },
+    {
+      "address": 0,
+      "issue_cycle": 212,
+      "kind": "write",
+      "object_id": "accumulator",
+      "preferred_banks": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "request_id": "compute_accumulator",
+      "size_bytes": 4096,
+      "tensor_type": "accumulator"
+    }
+  ],
+  "experiment_id": "catalog-mixtral-8x7b-v0.1",
+  "hardware": {
+    "bandwidth_bytes_per_cycle": 384,
+    "bank_count": 24,
+    "capacity_bytes": 1572864,
+    "interleave_bytes": 64,
+    "ports_per_bank": 1,
+    "request_buffer_depth": 32
+  },
+  "model_provenance": {
+    "alignment": 4,
+    "architecture_class": "homogeneous",
+    "derived_workload": true,
+    "dimension_divisor": 64,
+    "model_id": "mixtral-8x7b-v0.1",
+    "original_hidden_size": 4096,
+    "original_routed_expert_intermediate_sizes": [
+      14336,
+      14336,
+      14336,
+      14336,
+      14336,
+      14336,
+      14336,
+      14336
+    ],
+    "original_shared_expert_intermediate_sizes": [],
+    "original_top_k": 2,
+    "paper_scale_performance_claim": false,
+    "projection_count": 3,
+    "scaled_hidden_size": 64,
+    "scaled_routed_expert_intermediate_sizes": [
+      224,
+      224,
+      224,
+      224,
+      224,
+      224,
+      224,
+      224
+    ],
+    "scaled_shared_expert_intermediate_sizes": [],
+    "source_locator": "official config: hidden_size, intermediate_size, num_local_experts, num_experts_per_tok",
+    "source_title": "Mixtral of Experts",
+    "source_url": "https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/blob/main/config.json",
+    "streaming_fixed_capacity": true
+  },
+  "policy": {
+    "busy_threshold": 32,
+    "conflict_threshold": 4,
+    "mapping_overhead_per_object": 1,
+    "prefetch_window": 2,
+    "queue_threshold": 2,
+    "static_weight_banks": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "routing": {
+    "mode": "balanced",
+    "seed": 0,
+    "tokens": 32,
+    "top_k": 2
+  },
+  "workload_name": "mixtral-8x7b-v0.1"
+}

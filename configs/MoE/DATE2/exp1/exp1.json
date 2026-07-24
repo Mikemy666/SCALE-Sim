@@ -1,9 +1,29 @@
 {
-  "purpose": "B1_C1_layer_and_flow_characterization",
+  "purpose": "B1_C1_fixed_SP_ACC_boundary",
   "topology": "topologies/MoE/DATE2/exp1/MoDSE.csv",
-  "static_banks": [
-    8,
-    8,
-    8
-  ]
+  "static_sp_banks": [
+    5,
+    5,
+    5
+  ],
+  "static_acc_banks": 15,
+  "precision": {
+    "original_model_format": "FP32",
+    "compute_format": "INT8xINT8_INT32",
+    "ia_bytes_per_element": 1,
+    "weight_bytes_per_element": 1,
+    "accumulator_bytes_per_element": 4,
+    "output_bytes_per_element": 1,
+    "accumulator_mode": "banked_rmw",
+    "spill_sensitivity": false
+  },
+  "hardware": {
+    "bank_count": 30,
+    "bank_width_bits": 128,
+    "bank_entries": 128,
+    "capacity_bytes": 61440,
+    "ports_per_bank": 1,
+    "bandwidth_bytes_per_cycle": 480,
+    "mapping_overhead_per_object": 0
+  }
 }

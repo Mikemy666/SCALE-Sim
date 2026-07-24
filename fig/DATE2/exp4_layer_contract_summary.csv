@@ -1,0 +1,9 @@
+model,prefetch_enabled,layers,violations,mean_delta,max_delta
+HMoE,False,16,0,0.0,0
+HMoE,True,16,0,-244.3125,0
+Mixtral,False,16,0,0.0,0
+Mixtral,True,16,0,-251.5625,0
+MoDSE,False,16,0,0.0,0
+MoDSE,True,16,0,-47.75,0
+Switchtrans,False,16,0,0.0,0
+Switchtrans,True,16,0,-30.625,0

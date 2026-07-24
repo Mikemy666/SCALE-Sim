@@ -233,6 +233,23 @@ class topologies(object):
 
         self.topo_arrays.append(entry)
 
+    def set_gemm_m_values(self, layer_to_m):
+        """Update GEMM M dimensions and invalidate all derived topology caches."""
+        for layer_id, m_value in dict(layer_to_m).items():
+            layer_id = int(layer_id)
+            m_value = int(m_value)
+            if layer_id < 0 or layer_id >= len(self.topo_arrays):
+                raise IndexError('Invalid topology layer id: ' + str(layer_id))
+            if m_value <= 0:
+                raise ValueError('GEMM M must be positive for layer ' + str(layer_id))
+            self.topo_arrays[layer_id][1] = m_value
+
+        self.layers_calculated_hyperparams = []
+        self.spatio_temp_dim_arrays = []
+        self.topo_calc_hyper_param_flag = False
+        self.topo_calc_spatiotemp_params_flag = False
+        self.topo_calc_hyperparams()
+
     # create network topology array
     def append_topo_entry_from_list(self, layer_entry_list=[]):
         """

@@ -8,7 +8,7 @@ Planned subdirectories:
 
 - `baseline/`: frozen static, best-static, oracle, and runtime-dynamic controls;
 - `characterization/`: B1 and C1-C3 motivation experiments;
-- `ablation/`: mechanism-by-mechanism comparisons;
+- component ablation reuses DATE2 `overall/` matrices;
 - `sensitivity/`: window, chunk, routing, token, expert, and EP sweeps;
 - `workloads/`: per-model overrides for homogeneous and heterogeneous experts.
 

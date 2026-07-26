@@ -8,6 +8,7 @@
   "suites": {
     "overall": 4,
     "window_chunk": 32,
+    "joint_prefetch": 32,
     "robustness": 26,
     "characterization": 3
   },
@@ -16,7 +17,7 @@
     "exp2": "static_bank_sweep",
     "exp3": "naive_prefetch_interference",
     "exp4": "overall",
-    "exp5": "window_chunk",
+    "exp5": "joint_prefetch",
     "exp6": "robustness"
   },
   "precision": {

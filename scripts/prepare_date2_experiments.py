@@ -67,7 +67,7 @@ def uniformly_scale_topology(path, source):
 
 def save(suite, name, payload):
     payload = deepcopy(payload)
-    if suite in {"overall", "robustness"}:
+    if suite in {"overall", "joint_prefetch", "robustness"}:
         payload["policy"].update({
             "adaptive_prefetch": True,
             "max_prefetch_window": 32,
@@ -101,6 +101,7 @@ def main():
             payload["policy"]["prefetch_window"] = window
             payload["sweep"] = {"prefetch_window": window, "chunk_tiles": tiles}
             save("window_chunk", f"w{window}_c{tiles}", payload)
+            save("joint_prefetch", f"w{window}_c{tiles}", payload)
 
     source = TOPOLOGY_ROOT / "models/Mixtral.csv"
     for top_k in (1,2):
@@ -146,7 +147,7 @@ def main():
     from scripts.DATE2.run_date2_characterization import prepare as prepare_characterization
     prepare_characterization()
     suites={s:len(list((CONFIG_ROOT/s).glob("*.json"))) for s in
-            ("overall","window_chunk","robustness")}
+            ("overall","window_chunk","joint_prefetch","robustness")}
     suites["characterization"]=3
     manifest={"schema_version":2,"simulator_only":True,"rtl_dc_out_of_scope":True,
               "config_root":str(CONFIG_ROOT),"topology_root":str(TOPOLOGY_ROOT),
@@ -156,7 +157,7 @@ def main():
                   "exp2":"static_bank_sweep",
                   "exp3":"naive_prefetch_interference",
                   "exp4":"overall",
-                  "exp5":"window_chunk",
+                  "exp5":"joint_prefetch",
                   "exp6":"robustness",
               },
               "precision":{

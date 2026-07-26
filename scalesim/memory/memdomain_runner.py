@@ -457,11 +457,22 @@ def run_raw_baseline_with_details(
         Baseline.DYNAMIC_NOPF, Baseline.DYNAMIC_NAIVEPF, Baseline.MEMDOMAIN_RAW,
         Baseline.MEMDOMAIN_SAFE,
     }
+    # Baseline ownership follows the DATE2 1:1:1:3 partition.  Derive the
+    # ranges from the configured resource count instead of assuming 30 Banks:
+    # for the paper configuration this remains exactly 5/5/5/15, while small
+    # smoke/robustness configurations cannot produce out-of-range requests.
+    bank_count = config.resources.bank_count
+    if bank_count < 4:
+        raise ValueError("DATE2 requires at least four physical Banks")
+    sp_width = max(1, bank_count // 6)
+    if 3 * sp_width >= bank_count:
+        sp_width = 1
+    acc_start = 3 * sp_width
     static_groups = {
-        "ia": tuple(range(0, 5)),
-        "weight": tuple(range(5, 10)),
-        "oa": tuple(range(10, 15)),
-        "accumulator": tuple(range(15, 30)),
+        "ia": tuple(range(0, sp_width)),
+        "weight": tuple(range(sp_width, 2 * sp_width)),
+        "oa": tuple(range(2 * sp_width, 3 * sp_width)),
+        "accumulator": tuple(range(acc_start, bank_count)),
     }
     compute_requests = (
         config.compute_requests if dynamic else tuple(
@@ -469,7 +480,9 @@ def run_raw_baseline_with_details(
                 request,
                 preferred_banks=static_groups[request.tensor_type],
                 bank_group_size=(
-                    4 if request.tensor_type == "accumulator" else 5
+                    min(4, len(static_groups["accumulator"]))
+                    if request.tensor_type == "accumulator"
+                    else len(static_groups[request.tensor_type])
                 ),
             )
             for request in config.compute_requests

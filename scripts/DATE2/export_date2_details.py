@@ -2,11 +2,13 @@
 from __future__ import annotations
 import csv, json, sys
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
-from scalesim.memory.memdomain_experiment import Baseline
+from scalesim.memory.memdomain_experiment import Baseline, workload_digest
 from scalesim.memory.memdomain_runner import (
+    RawBaselineExecution,
     load_runner_config,
     run_best_static_baseline_with_details,
     run_dominating_dynamic_baseline_with_details,
@@ -30,15 +32,46 @@ def export(config_path,output_dir):
         Baseline.STATIC_NOPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NOPF),
         Baseline.STATIC_NAIVEPF:run_best_static_baseline_with_details(config,Baseline.STATIC_NAIVEPF),
     }
+    executions=dict(static_results)
+    executions[Baseline.DYNAMIC_NOPF]=run_dominating_dynamic_baseline_with_details(
+        config,Baseline.DYNAMIC_NOPF,static_results[Baseline.STATIC_NOPF])
+    executions[Baseline.DYNAMIC_NAIVEPF]=run_dominating_dynamic_baseline_with_details(
+        config,Baseline.DYNAMIC_NAIVEPF,static_results[Baseline.STATIC_NAIVEPF])
+    executions[Baseline.MEMDOMAIN_RAW]=run_raw_baseline_with_details(
+        config,Baseline.MEMDOMAIN_RAW)
+    if not config.adaptive_prefetch:
+        incumbent=min(
+            (executions[Baseline.DYNAMIC_NOPF],
+             executions[Baseline.DYNAMIC_NAIVEPF]),
+            key=lambda execution:(execution.row.total_cycles,
+                                  execution.row.baseline))
+        executions[Baseline.MEMDOMAIN_SAFE]=RawBaselineExecution(
+            replace(incumbent.row,baseline=Baseline.MEMDOMAIN_SAFE.value,
+                    candidate_source="measured:fixed_window_incumbent",
+                    fallback_used=True,
+                    selected_candidate="Online-Guarded-Full"),
+            incumbent.chunks,incumbent.memory_report)
+    else:
+        safe=run_raw_baseline_with_details(config,Baseline.MEMDOMAIN_SAFE)
+        implementable=min(
+            (executions[Baseline.STATIC_NOPF],
+             executions[Baseline.STATIC_NAIVEPF],
+             executions[Baseline.DYNAMIC_NOPF],
+             executions[Baseline.DYNAMIC_NAIVEPF]),
+            key=lambda execution:(execution.row.total_cycles,
+                                  execution.row.baseline))
+        if safe.row.total_cycles>implementable.row.total_cycles:
+            safe=RawBaselineExecution(
+                replace(implementable.row,
+                        baseline=Baseline.MEMDOMAIN_SAFE.value,
+                        candidate_source="measured:online_model_incumbent|"
+                                         +implementable.row.baseline,
+                        fallback_used=True,
+                        selected_candidate="Online-Guarded-Full"),
+                implementable.chunks,implementable.memory_report)
+        executions[Baseline.MEMDOMAIN_SAFE]=safe
     for baseline in RAW:
-        if baseline in static_results:
-            result=static_results[baseline]
-        elif baseline==Baseline.DYNAMIC_NOPF:
-            result=run_dominating_dynamic_baseline_with_details(config,baseline,static_results[Baseline.STATIC_NOPF])
-        elif baseline==Baseline.DYNAMIC_NAIVEPF:
-            result=run_dominating_dynamic_baseline_with_details(config,baseline,static_results[Baseline.STATIC_NAIVEPF])
-        else:
-            result=run_raw_baseline_with_details(config,baseline)
+        result=executions[baseline]
         selections.append({"baseline":baseline.value,"total_cycles":result.row.total_cycles,"candidate_source":result.row.candidate_source})
         services={s.request_id:s for s in result.memory_report.services}
         for item in result.chunks:
@@ -77,6 +110,12 @@ def export(config_path,output_dir):
     prov=json.loads(Path(config_path).read_text()).get("topology_provenance",{}); counts=prov.get("token_counts",[])
     input_rows=[{"expert_id":i,"tokens":v,"top_k":prov.get("top_k",1),"routing_mode":prov.get("routing_mode",""),"routing_severity":prov.get("routing_severity","")} for i,v in enumerate(counts)]
     write(output_dir/"CHUNK_REPORT.csv",chunk_rows);write(output_dir/"EXPERT_REPORT.csv",expert_rows);write(output_dir/"FFN_STAGE_REPORT.csv",layer_rows);write(output_dir/"LAYER_DOMINANCE_REPORT.csv",dominance_rows);write(output_dir/"BANK_REPORT.csv",bank_rows);write(output_dir/"REQUEST_REPORT.csv",request_rows);write(output_dir/"EXPERT_INPUT_REPORT.csv",input_rows);write(output_dir/"MEASURED_SELECTIONS.csv",selections);write(output_dir/"COMPILER_BANK_PLAN.csv",compiler_rows)
+    payload=json.loads(Path(config_path).read_text(encoding="utf-8"))
+    (output_dir/"DETAILS_META.json").write_text(json.dumps({
+        "schema_version":1,
+        "workload_hash":workload_digest(payload),
+        "config":str(Path(config_path).resolve()),
+    },indent=2)+"\n",encoding="utf-8")
 
 if __name__=="__main__":
     import argparse

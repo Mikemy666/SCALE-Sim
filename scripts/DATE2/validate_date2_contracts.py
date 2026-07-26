@@ -19,7 +19,7 @@ from scalesim.memory.memdomain_experiment import (  # noqa: E402
     workload_digest,
 )
 
-MATRIX_SUITES = ("overall", "window_chunk", "robustness")
+MATRIX_SUITES = ("overall", "window_chunk", "joint_prefetch", "robustness")
 BASELINE_NAMES = (
     Baseline.STATIC_NOPF.value,
     Baseline.STATIC_NAIVEPF.value,
@@ -68,11 +68,13 @@ def audit_matrix(root: Path, suite: str, path: Path):
 def audit_layer_reports(root: Path, suites, require=False):
     failures = []
     experiment_dirs = {
-        "overall": "exp4", "window_chunk": "exp5", "robustness": "exp6",
+        "overall": "exp4", "joint_prefetch": "exp5", "robustness": "exp6",
     }
     reports = []
     expected = 0
     for suite in suites:
+        if suite not in experiment_dirs:
+            continue
         configs = sorted(
             (root / "configs/MoE/DATE2" / suite).glob("*.json")
         )

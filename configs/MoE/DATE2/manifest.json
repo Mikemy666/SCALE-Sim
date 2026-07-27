@@ -10,7 +10,8 @@
     "window_chunk": 32,
     "joint_prefetch": 32,
     "robustness": 26,
-    "characterization": 3
+    "characterization": 3,
+    "robustness_factorial": 96
   },
   "paper_experiments": {
     "exp1": "layer_characterization",
@@ -18,7 +19,7 @@
     "exp3": "naive_prefetch_interference",
     "exp4": "overall",
     "exp5": "joint_prefetch",
-    "exp6": "robustness"
+    "exp6": "robustness_factorial"
   },
   "precision": {
     "original_model_format": "FP32",

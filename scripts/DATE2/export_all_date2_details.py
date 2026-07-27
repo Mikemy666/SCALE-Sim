@@ -4,7 +4,10 @@ import argparse
 from pathlib import Path
 from export_date2_details import export
 ROOT=Path(__file__).resolve().parents[2]
-GROUPS=(("overall","exp4"),("joint_prefetch","exp5"),("robustness","exp6"))
+GROUPS=(
+    ("overall","exp4"),("joint_prefetch","exp5"),
+    ("robustness_factorial","exp6"),
+)
 
 def main():
     parser=argparse.ArgumentParser()

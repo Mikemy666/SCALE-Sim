@@ -259,12 +259,24 @@ metric=d.pivot(index='model',columns='baseline',
                values=['total_cycles','compute_cycles','bank_conflict_rate']).reindex(model_order)
 static_stall=metric['total_cycles']['Static-NoPF']-metric['compute_cycles']['Static-NoPF']
 dynamic_stall=metric['total_cycles']['Dynamic-NoPF']-metric['compute_cycles']['Dynamic-NoPF']
+stall_reduction=(1-dynamic_stall/static_stall)*100
+fig,ax=plt.subplots(figsize=(9.5,4.8));x=np.arange(len(model_order));width=.34
+static_bars=ax.bar(x-width/2,static_stall,width,label='Static-NoPF',color='#A0A0A0')
+dynamic_bars=ax.bar(x+width/2,dynamic_stall,width,label='Dynamic-NoPF',color='#4C78A8')
+ax.bar_label(static_bars,labels=[f'{int(v):,}' for v in static_stall],padding=3,fontsize=9)
+ax.bar_label(dynamic_bars,
+             labels=[f'{int(v):,}\\n(-{r:.1f}%)' for v,r in zip(dynamic_stall,stall_reduction)],
+             padding=3,fontsize=9)
+ax.set_xticks(x,model_order);ax.set_ylabel('Memory stall cycles (lower is better)')
+ax.set_title('(c) Memory-stall reduction from dynamic Bank mapping')
+ax.legend(frameon=False);ax.set_ylim(0,max(static_stall)*1.20)
+plt.tight_layout();plt.savefig(FIG/'exp4_memory_stall_comparison.pdf',bbox_inches='tight');plt.show()
 summary=pd.DataFrame(index=p.index)
 summary['Static cycles']=p['Static-NoPF'].astype(int)
 summary['Dynamic cycles']=p['Dynamic-NoPF'].astype(int)
 summary['speedup']=speedup
 summary['cycle reduction (%)']=reduction
-summary['memory-stall reduction (%)']=(1-dynamic_stall/static_stall)*100
+summary['memory-stall reduction (%)']=stall_reduction
 summary['bank-conflict-rate reduction (%)']=(
     1-metric['bank_conflict_rate']['Dynamic-NoPF']/
       metric['bank_conflict_rate']['Static-NoPF'])*100
@@ -347,14 +359,14 @@ conventional=['Static-NoPF','Static-NaivePF','Dynamic-NoPF','Dynamic-NaivePF']
 wide=d[d.baseline.isin(conventional+['MemDomain'])].pivot(
     index=['window','chunk_tiles'],columns='baseline',values='total_cycles')
 best_conventional=wide[conventional].min(axis=1)
-final_gain=((best_conventional/wide.MemDomain)-1)*100
+final_gain=(1-wide.MemDomain/best_conventional)*100
 final_grid=final_gain.unstack('chunk_tiles')
 final_vs_static=(1-grid('MemDomain')/grid('Static-NoPF'))*100
 
 fig,axes=plt.subplots(1,2,figsize=(12,5.4))
 heat(axes[0],final_vs_static,'(c) MemDomain gain vs Static-NoPF (%)',
      cmap='YlGn',fmt='.1f')
-heat(axes[1],final_grid,'(d) Incremental gain over best conventional (%)',
+heat(axes[1],final_grid,'(d) Incremental cycle reduction vs best conventional (%)',
      cmap='YlGn',fmt='.2f')
 plt.tight_layout();plt.savefig(FIG/'exp5_public_sensitivity.pdf',bbox_inches='tight');plt.show()
 
@@ -374,7 +386,7 @@ global_memdomain=int(wide.MemDomain.min())
 print(f'Globally tuned best conventional: {global_conventional} cycles')
 print(f'Globally tuned best MemDomain: {global_memdomain} cycles')
 print(f'Global-search incremental gain: '
-      f'{(global_conventional/global_memdomain-1)*100:.2f}%')
+      f'{(1-global_memdomain/global_conventional)*100:.2f}%')
 """),
         code("""
 timely=grid('Dynamic-NaivePF','timely_prefetch_ratio')*100
@@ -389,7 +401,7 @@ plt.tight_layout();plt.savefig(FIG/'exp5_prefetch_mechanisms.pdf',bbox_inches='t
 
 # Internal diagnostic only: Raw is not an additional paper scheme.
 raw=d[d.baseline.eq('MemDomain-Raw')].set_index(['window','chunk_tiles']).total_cycles
-raw_gain=(best_conventional/raw-1)*100
+raw_gain=(1-raw/best_conventional)*100
 diagnostic=pd.DataFrame({
  'count':[
    int((static_pf_gain<0).sum().sum()),
@@ -413,135 +425,110 @@ if not all(adaptive_flags):
 
 def build_exp6():
     write("exp6",[
-        md("""# DATE2 实验6：跨工作负载与系统配置鲁棒性
+        md("""# DATE2 实验6：四模型单变量敏感性分析
 
-在26组配置上覆盖模型类别、专家数、Token数、Top-k、路由不平衡与随机种子、
-以及Expert Parallel配置。论文只报告最终`MemDomain`；Raw仅用于解释失败原因。
+每次只改变一个变量，并在HMoE、Mixtral、MoDSE和Switchtrans四个模型上比较：
+`Static-NoPF`、`Dynamic-NoPF`、`Dynamic-NaivePF`和最终`MemDomain`。
 
-必须区分两种口径：
-1. 相对原始`Static-NoPF`的端到端收益；
-2. 相对四个传统候选中最强者的MemDomain额外收益。"""),
+判定只在**同一模型、同一变量值**内部进行：MemDomain周期最低，Static-NoPF周期最高，
+Dynamic-NoPF不慢于Static-NoPF。不同变量值之间不要求保持这一排序。"""),
         code(SETUP+"""
+SCHEMES=['Static-NoPF','Dynamic-NoPF','Dynamic-NaivePF','MemDomain']
+MODELS=['HMoE','Mixtral','MoDSE','Switchtrans']
+COLORS={'Static-NoPF':'#A0A0A0','Dynamic-NoPF':'#4C78A8',
+        'Dynamic-NaivePF':'#72B7B2','MemDomain':'#59A14F'}
+LABELS={'Static-NoPF':'Static','Dynamic-NoPF':'Dynamic',
+        'Dynamic-NaivePF':'Dynamic-PF','MemDomain':'MemDomain'}
+VALUE_ORDER={
+ 'expert_count':['4','8','16'],
+ 'token_count':['32','128','256','512'],
+ 'top_k':['1','2'],
+ 'expert_parallel':['1','2'],
+ 'routing_severity':['balanced','light','high'],
+ 'routing_seed':[f'{severity}_seed{seed}' for severity in ('light','high')
+                 for seed in range(40,45)]}
 rows=[]
-for config in sorted((ROOT/'configs/MoE/DATE2/robustness').glob('*.json')):
-    q=current_matrix('robustness',config.stem).copy();q['variant']=config.stem;rows.append(q)
+for config in sorted((ROOT/'configs/MoE/DATE2/robustness_factorial').glob('*.json')):
+    payload=json.loads(config.read_text(encoding='utf-8'));sweep=payload['sweep']
+    q=current_matrix('robustness_factorial',config.stem).copy()
+    q['baseline']=q.baseline.replace({FINAL_INTERNAL:'MemDomain'})
+    q=q[q.baseline.isin(SCHEMES)].copy()
+    q['variable']=sweep['variable'];q['value']=str(sweep['value']);q['model']=sweep['model']
+    rows.append(q)
 d=pd.concat(rows,ignore_index=True)
-def classify(v):
-    if v.startswith('class_'): return 'Model class'
-    if v.startswith('experts_'): return 'Expert count'
-    if v.startswith('tokens_'): return 'Token count'
-    if v.startswith('topk_'): return 'Top-k'
-    if v.startswith('ep_'): return 'Expert parallel'
-    if '_seed' in v: return 'Routing seeds'
-    if v.startswith('routing_'): return 'Routing severity'
-    raise ValueError(v)
-d['group']=d.variant.map(classify)
-d['baseline']=d.baseline.replace({FINAL_INTERNAL:'MemDomain'})
-assert d.variant.nunique()==26
-assert d.groupby('variant').size().eq(7).all()
-p=d.pivot(index='variant',columns='baseline',values='total_cycles')
-conventional=['Static-NoPF','Static-NaivePF','Dynamic-NoPF','Dynamic-NaivePF']
-best=p[conventional].min(axis=1)
-summary=pd.DataFrame(index=p.index)
-summary['group']=summary.index.map(classify)
-summary['speedup_vs_static']=p['Static-NoPF']/p.MemDomain
-summary['gain_vs_best_pct']=(best/p.MemDomain-1)*100
-summary['raw_gain_vs_best_pct']=(best/p['MemDomain-Raw']-1)*100
-summary['source']=d[d.baseline.eq('MemDomain')].set_index('variant').candidate_source
-assert (summary.gain_vs_best_pct>=-1e-12).all()
+assert d.groupby(['variable','value','model']).size().eq(4).all()
+assert d.groupby(['variable','value']).model.nunique().eq(4).all()
+assert len(d)==96*4
+wide=d.pivot(index=['variable','value','model'],columns='baseline',values='total_cycles')
+contract=pd.DataFrame(index=wide.index)
+contract['MemDomain best']=wide.MemDomain.eq(wide[SCHEMES].min(axis=1))
+contract['Static worst']=wide['Static-NoPF'].eq(wide[SCHEMES].max(axis=1))
+contract['Dynamic <= Static']=wide['Dynamic-NoPF'].le(wide['Static-NoPF'])
+display(contract.sum().to_frame('passing groups'))
+assert contract.all().all()
+print('All 96 model-value groups satisfy the requested within-group contract.')
 """),
         code("""
-colors={name:plt.cm.tab10(i) for i,name in enumerate(summary.group.unique())}
-q=summary.sort_values('speedup_vs_static')
-fig,axes=plt.subplots(2,1,figsize=(14,8),sharex=True,
-                      gridspec_kw={'height_ratios':[1.15,1]})
-x=np.arange(len(q));bar_colors=[colors[g] for g in q.group]
-bars=axes[0].bar(x,q.speedup_vs_static,color=bar_colors)
-axes[0].axhline(1,color='black',lw=.8)
-axes[0].set_ylabel('Speedup (higher is better)')
-axes[0].set_title('(a) MemDomain vs Static-NoPF')
-bars=axes[1].bar(x,q.gain_vs_best_pct,color=bar_colors)
-axes[1].axhline(0,color='black',lw=.8)
-axes[1].set_ylabel('Incremental cycle reduction (%)')
-axes[1].set_title('(b) MemDomain vs strongest conventional candidate')
-axes[1].set_xticks(x,q.index,rotation=65,ha='right',fontsize=8)
-from matplotlib.patches import Patch
-axes[0].legend(handles=[Patch(color=color,label=name) for name,color in colors.items()],
-               ncol=4,frameon=False,fontsize=8)
-plt.tight_layout();plt.savefig(FIG/'exp6_public_robustness.pdf',bbox_inches='tight');plt.show()
-print(f'Positive speedup vs Static-NoPF: {(summary.speedup_vs_static>1).sum()}/26')
-print(f'Strict incremental wins: {(summary.gain_vs_best_pct>1e-12).sum()}/26')
-"""),
-        code("""
-group_summary=summary.groupby('group').agg(
- configurations=('speedup_vs_static','size'),
- min_speedup=('speedup_vs_static','min'),
- mean_speedup=('speedup_vs_static','mean'),
- max_speedup=('speedup_vs_static','max'),
- strict_joint_wins=('gain_vs_best_pct',lambda x:int((x>1e-12).sum())),
- mean_incremental_gain_pct=('gain_vs_best_pct','mean'),
- max_incremental_gain_pct=('gain_vs_best_pct','max'))
-display(group_summary.round(3))
+def variable_table(variable):
+    z=wide.loc[variable].reset_index()
+    z['Dynamic reduction (%)']=(1-z['Dynamic-NoPF']/z['Static-NoPF'])*100
+    z['MemDomain reduction (%)']=(1-z.MemDomain/z['Static-NoPF'])*100
+    z['MemDomain strict best']=z.MemDomain.lt(
+        z[['Static-NoPF','Dynamic-NoPF','Dynamic-NaivePF']].min(axis=1))
+    order={value:index for index,value in enumerate(VALUE_ORDER[variable])}
+    z['_order']=z.value.map(order)
+    return z.sort_values(['model','_order']).drop(columns='_order')
 
-ordered={
- 'Expert count':['experts_4','experts_8','experts_16'],
- 'Token count':['tokens_32','tokens_128','tokens_256','tokens_512'],
- 'Top-k':['topk_1','topk_2'],
- 'Expert parallel':['ep_1gpu','ep_2gpu'],
- 'Model class':['class_HMoE','class_Mixtral'],
- 'Routing severity':['routing_balanced','routing_light','routing_high']}
-fig,axes=plt.subplots(2,3,figsize=(15,8));axes=axes.ravel()
-for ax,(title,names) in zip(axes,ordered.items()):
-    z=summary.loc[names]
-    ax.plot(range(len(z)),z.speedup_vs_static,marker='o',label='vs Static-NoPF')
-    ax.set_xticks(range(len(z)),[x.replace('_','\\n') for x in names],fontsize=8)
-    ax.axhline(1,color='black',lw=.7);ax.set_title(title);ax.set_ylabel('Speedup')
-plt.tight_layout();plt.savefig(FIG/'exp6_dimension_trends.pdf',bbox_inches='tight');plt.show()
+def plot_variable(variable,title,filename):
+    values=VALUE_ORDER[variable];z=wide.loc[variable]
+    fig,axes=plt.subplots(1,4,figsize=(18,4.8),sharey=False)
+    width=.19;x=np.arange(len(values))
+    for ax,model in zip(axes,MODELS):
+        m=z.xs(model,level='model').reindex(values)
+        for index,scheme in enumerate(SCHEMES):
+            bars=ax.bar(x+(index-1.5)*width,m[scheme],width,
+                        color=COLORS[scheme],label=LABELS[scheme])
+            if scheme=='MemDomain':
+                ax.bar_label(bars,labels=[f'{int(v):,}' for v in m[scheme]],
+                             padding=2,fontsize=7,rotation=90)
+        ax.set_xticks(x,values,rotation=25 if len(values)>4 else 0,ha='right' if len(values)>4 else 'center')
+        ax.set_title(model);ax.set_xlabel(title);ax.set_ylabel('Total cycles (lower is better)')
+        ax.grid(axis='y',alpha=.2)
+    handles=[plt.Rectangle((0,0),1,1,color=COLORS[s]) for s in SCHEMES]
+    fig.legend(handles,[LABELS[s] for s in SCHEMES],loc='upper center',ncol=4,
+               frameon=False,bbox_to_anchor=(.5,1.01))
+    fig.suptitle(f'Exp6 sensitivity: {title}',y=1.10,fontsize=14)
+    plt.tight_layout(rect=(0,0,1,.90));plt.savefig(FIG/filename,bbox_inches='tight');plt.show()
+    table=variable_table(variable)
+    display(table[['model','value',*SCHEMES,'Dynamic reduction (%)',
+                   'MemDomain reduction (%)','MemDomain strict best']].round(3))
+    assert (table.MemDomain<=table[SCHEMES].min(axis=1)).all()
+    assert (table['Static-NoPF']>=table[SCHEMES].max(axis=1)).all()
+    assert (table['Dynamic-NoPF']<=table['Static-NoPF']).all()
+    return table
 """),
         code("""
-seed=summary[summary.group.eq('Routing seeds')].copy()
-seed['severity']=seed.index.to_series().str.extract(r'routing_(light|high)')[0].values
-seed['seed']=seed.index.to_series().str.extract(r'seed(\\d+)')[0].astype(int).values
-fig,axes=plt.subplots(1,2,figsize=(12,4.5))
-for severity,z in seed.groupby('severity'):
-    z=z.sort_values('seed')
-    axes[0].plot(z.seed,z.speedup_vs_static,marker='o',label=severity)
-    axes[1].plot(z.seed,z.gain_vs_best_pct,marker='o',label=severity)
-axes[0].axhline(1,color='black',lw=.7);axes[0].set_title('(c) Routing-seed overall speedup')
-axes[0].set_ylabel('Speedup vs Static-NoPF');axes[0].set_xlabel('Seed')
-axes[1].axhline(0,color='black',lw=.7);axes[1].set_title('(d) Routing-seed incremental gain')
-axes[1].set_ylabel('Cycle reduction vs best candidate (%)');axes[1].set_xlabel('Seed')
-for ax in axes:ax.legend(frameon=False)
-plt.tight_layout();plt.savefig(FIG/'exp6_routing_seed_stability.pdf',bbox_inches='tight');plt.show()
+expert_count=plot_variable('expert_count','Expert count','exp6_expert_count.pdf')
 """),
         code("""
-tol=1e-12
-summary['diagnosis']=np.where(summary.gain_vs_best_pct>tol,'Strict joint win',
- np.where(summary.raw_gain_vs_best_pct>tol,'Selector false-negative','Raw joint loses'))
-counts=summary.diagnosis.value_counts().reindex(
- ['Strict joint win','Selector false-negative','Raw joint loses'],fill_value=0)
-raw_rows=d[d.baseline.eq('MemDomain-Raw')].set_index('variant')
-fig,axes=plt.subplots(1,2,figsize=(12,4.7))
-bars=axes[0].bar(counts.index,counts.values,color=['#59A14F','#F28E2B','#E15759'])
-axes[0].bar_label(bars);axes[0].set_ylabel('Configurations')
-axes[0].set_title('(e) Why final scheme does or does not add gain')
-axes[0].tick_params(axis='x',rotation=15)
-scatter=axes[1].scatter(raw_rows.timely_prefetch_ratio*100,
- summary.loc[raw_rows.index,'raw_gain_vs_best_pct'],
- c=raw_rows.prefetch_interference_stall_cycles,cmap='viridis',s=55)
-axes[1].axhline(0,color='black',lw=.8);axes[1].set_xlabel('Raw timely prefetch (%)')
-axes[1].set_ylabel('Raw gain vs best conventional (%)')
-axes[1].set_title('(f) Internal mechanism diagnosis')
-plt.colorbar(scatter,ax=axes[1],label='Prefetch interference cycles')
-plt.tight_layout();plt.savefig(FIG/'exp6_failure_diagnosis.pdf',bbox_inches='tight');plt.show()
-display(summary.groupby('diagnosis').size().rename('configurations'))
-display(summary[summary.diagnosis.ne('Strict joint win')][
- ['group','speedup_vs_static','gain_vs_best_pct','raw_gain_vs_best_pct','diagnosis']].round(3))
+token_count=plot_variable('token_count','Token count','exp6_token_count.pdf')
 """),
-        md("""## 论文判读边界
+        code("""
+top_k=plot_variable('top_k','Top-k','exp6_top_k.pdf')
+"""),
+        code("""
+expert_parallel=plot_variable('expert_parallel','Number of GPUs','exp6_expert_parallel.pdf')
+"""),
+        code("""
+routing_severity=plot_variable('routing_severity','Routing severity','exp6_routing_severity.pdf')
+"""),
+        code("""
+routing_seed=plot_variable('routing_seed','Routing distribution and seed','exp6_routing_seed.pdf')
+"""),
+        md("""## 判读规则
 
-- 26/26相对Static-NoPF为正，说明完整系统在广泛配置下安全且有效；
-- 只有严格高于最强传统候选的配置才能归因于联合优化本身；
-- 回退配置必须区分“联合候选本身更差”和“在线选择器误判”，二者对应不同改进方向；
-- 若严格收益覆盖率较低，只能声称鲁棒不回退，不能声称联合优化在所有配置上都有额外收益。""")
+- 每张图只分析一个变量；四个子图分别对应四个模型；
+- 每个变量值内部验证MemDomain最好、Static最差、Dynamic优于Static；
+- 跨变量值的绝对周期变化反映工作量、路由压力或通信开销变化，应单独解释，
+  不要求较大变量值的MemDomain一定优于较小变量值的Static。""")
     ])

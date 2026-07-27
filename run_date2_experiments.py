@@ -9,8 +9,15 @@ from scalesim.memory.memdomain_runner import run_matrix_file
 
 ROOT=Path(__file__).resolve().parent
 CONFIG_ROOT=ROOT/"configs/MoE/DATE2"; OUTPUT_ROOT=ROOT/"outputs/DATE2"
-SUITES=("overall","window_chunk","joint_prefetch","robustness")
-EXP_TO_SUITE={"exp4":"overall","exp5":"joint_prefetch","exp6":"robustness"}
+SUITES=("overall","window_chunk","joint_prefetch","robustness_factorial")
+EXP_TO_SUITE={
+    "exp4":"overall","exp5":"joint_prefetch","exp6":"robustness_factorial"
+}
+EXP6_VARIABLES=(
+    "expert_count","token_count","top_k","expert_parallel",
+    "routing_severity","routing_seed",
+)
+EXP6_MODELS=("HMoE","Mixtral","MoDSE","Switchtrans")
 
 def current_rows(config: Path, output: Path):
     """Return validated rows only when an existing CSV matches its config."""
@@ -56,7 +63,15 @@ def main():
                         help="rerun valid matrices instead of resuming")
     parser.add_argument("--skip-details",action="store_true",
                         help="run validated matrices without replaying detailed reports")
+    parser.add_argument("--exp6-variable",choices=EXP6_VARIABLES)
+    parser.add_argument("--exp6-value")
+    parser.add_argument("--exp6-model",choices=EXP6_MODELS)
     args=parser.parse_args()
+    exp6_filters=(args.exp6_variable,args.exp6_value,args.exp6_model)
+    if any(exp6_filters) and args.exp!="exp6":
+        parser.error("--exp6-* filters require --exp exp6")
+    if args.exp6_value and not args.exp6_variable:
+        parser.error("--exp6-value requires --exp6-variable")
     if args.exp in ("exp1","exp2"):
         command=[sys.executable,str(ROOT/"scripts/DATE2/run_date2_characterization.py"),"--exp",args.exp]
         if args.dry_run: print(" ".join(command))
@@ -82,6 +97,18 @@ def main():
     for suite in suites:
         configs=sorted((CONFIG_ROOT/suite).glob("*.json"))
         if args.variant: configs=[p for p in configs if p.stem==args.variant]
+        if suite=="robustness_factorial" and any(exp6_filters):
+            selected=[]
+            for path in configs:
+                sweep=json.loads(path.read_text(encoding="utf-8")).get("sweep",{})
+                if args.exp6_variable and sweep.get("variable")!=args.exp6_variable:
+                    continue
+                if args.exp6_value and str(sweep.get("value"))!=args.exp6_value:
+                    continue
+                if args.exp6_model and sweep.get("model")!=args.exp6_model:
+                    continue
+                selected.append(path)
+            configs=selected
         if not configs:
             parser.error(
                 f"no configuration matched suite={suite!r}, "
@@ -158,8 +185,12 @@ def main():
                 print(f"resume: valid details exist for {suite}/{config.stem}")
     if not args.dry_run and summary:
         OUTPUT_ROOT.mkdir(parents=True,exist_ok=True)
-        label=(f"{args.exp or args.suite}_{args.variant}"
-               if args.variant else (args.exp or args.suite))
+        suffix=[]
+        if args.variant: suffix.append(args.variant)
+        if args.exp6_variable: suffix.append(args.exp6_variable)
+        if args.exp6_value: suffix.append(args.exp6_value)
+        if args.exp6_model: suffix.append(args.exp6_model)
+        label="_".join([args.exp or args.suite,*suffix])
         path=OUTPUT_ROOT/("summary_all.csv" if label=="all" else f"summary_{label}.csv")
         with path.open("w",newline="",encoding="utf-8") as stream:
             writer=csv.DictWriter(stream,fieldnames=tuple(summary[0])); writer.writeheader(); writer.writerows(summary)

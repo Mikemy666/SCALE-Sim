@@ -67,7 +67,9 @@ def uniformly_scale_topology(path, source):
 
 def save(suite, name, payload):
     payload = deepcopy(payload)
-    if suite in {"overall", "joint_prefetch", "robustness"}:
+    if suite in {
+        "overall", "joint_prefetch", "robustness", "robustness_factorial"
+    }:
         payload["policy"].update({
             "adaptive_prefetch": True,
             "max_prefetch_window": 32,
@@ -147,7 +149,8 @@ def main():
     from scripts.DATE2.run_date2_characterization import prepare as prepare_characterization
     prepare_characterization()
     suites={s:len(list((CONFIG_ROOT/s).glob("*.json"))) for s in
-            ("overall","window_chunk","joint_prefetch","robustness")}
+            ("overall","window_chunk","joint_prefetch","robustness",
+             "robustness_factorial")}
     suites["characterization"]=3
     manifest={"schema_version":2,"simulator_only":True,"rtl_dc_out_of_scope":True,
               "config_root":str(CONFIG_ROOT),"topology_root":str(TOPOLOGY_ROOT),
@@ -158,7 +161,7 @@ def main():
                   "exp3":"naive_prefetch_interference",
                   "exp4":"overall",
                   "exp5":"joint_prefetch",
-                  "exp6":"robustness",
+                  "exp6":"robustness_factorial",
               },
               "precision":{
                   "original_model_format":"FP32",

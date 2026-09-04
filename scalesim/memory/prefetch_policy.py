@@ -36,6 +36,7 @@ class BankSnapshot:
     pressure: Mapping[int, BankPressure]
     free_bytes: Mapping[int, int]
     capacity_bytes: Mapping[int, int] = field(default_factory=dict)
+    queue_capacity: Mapping[int, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.cycle < 0:
@@ -44,6 +45,8 @@ class BankSnapshot:
             raise ValueError("free Bank capacity must be non-negative")
         if any(value <= 0 for value in self.capacity_bytes.values()):
             raise ValueError("Bank capacity must be positive")
+        if any(value <= 0 for value in self.queue_capacity.values()):
+            raise ValueError("queue capacity must be positive")
 
 
 @dataclass(frozen=True)

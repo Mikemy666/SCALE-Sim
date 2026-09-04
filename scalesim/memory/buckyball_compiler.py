@@ -45,6 +45,47 @@ def _cycles(m: int, n: int, k: int, allocation: BankAllocation) -> Tuple[int, in
     return compute + exposed, exposed, conflicts
 
 
+def evaluate_gemm_allocation(
+    m: int, n: int, k: int, allocation: BankAllocation,
+) -> Tuple[int, int, int]:
+    """Public deterministic cost used by static and dynamic paper controls."""
+    if min(m, n, k) <= 0:
+        raise ValueError("GEMM dimensions must be positive")
+    if allocation.total != CONTRACT.bank_count:
+        raise ValueError("paper allocations must conserve all physical Banks")
+    return _cycles(m, n, k, allocation)
+
+
+@lru_cache(maxsize=None)
+def compile_workload_static_plan(
+    dimensions: Tuple[Tuple[int, int, int], ...],
+) -> BankAllocation:
+    """Choose one fixed four-domain allocation for an entire MoE workload.
+
+    This is deliberately different from ``compile_gemm_bank_plan``: every
+    expert/FFN stage contributes to one aggregate objective and the selected
+    allocation is frozen for the complete execution.  Stage-wise selection is
+    reserved for the Dynamic control.
+    """
+    if not dimensions or any(min(item) <= 0 for item in dimensions):
+        raise ValueError("static workload compilation requires positive GEMMs")
+    candidates = []
+    for allocation in legal_allocations():
+        if allocation.total != CONTRACT.bank_count:
+            continue
+        values = tuple(_cycles(*dims, allocation) for dims in dimensions)
+        objective = CompilerObjective(
+            sum(item[0] for item in values),
+            sum(item[1] for item in values),
+            sum(item[2] for item in values),
+            allocation.total,
+            allocation.as_tuple(),
+        )
+        candidates.append((allocation, objective))
+    selected, _ = select_compiler_allocation(candidates)
+    return selected
+
+
 @lru_cache(maxsize=None)
 def compile_gemm_bank_plan(m: int, n: int, k: int) -> GemmBankPlan:
     if min(m, n, k) <= 0:

@@ -75,6 +75,11 @@ class ExperimentRow:
     selected_candidate: str = ""
     mapping_work_cycles: int = 0
     mapping_hidden_cycles: int = 0
+    hbm_queue_wait_cycles: int = 0
+    hbm_service_cycles: int = 0
+    hbm_busy_cycles: int = 0
+    hbm_max_queue_depth: int = 0
+    hbm_utilization: float = 0.0
 
     def __post_init__(self) -> None:
         if self.schema_version != 1:
@@ -92,6 +97,8 @@ class ExperimentRow:
             "prefetch_bytes", "prefetch_occupancy_byte_cycles",
             "compute_transfer_overlap_cycles", "mapping_count", "mapping_failures",
             "peak_occupied_bytes", "mapping_work_cycles", "mapping_hidden_cycles",
+            "hbm_queue_wait_cycles", "hbm_service_cycles", "hbm_busy_cycles",
+            "hbm_max_queue_depth",
         )
         if any(int(getattr(self, name)) < 0 for name in non_negative):
             raise ValueError("integer result fields must be non-negative")
@@ -101,6 +108,7 @@ class ExperimentRow:
             "bank_conflict_rate", "hotspot_bank_ratio", "idle_bank_ratio",
             "prefetch_coverage", "prefetch_accuracy", "timely_prefetch_ratio",
             "late_prefetch_ratio", "unused_prefetch_ratio",
+            "hbm_utilization",
         )
         if any(not 0.0 <= float(getattr(self, name)) <= 1.0 for name in ratios):
             raise ValueError("ratio fields must be in [0, 1]")

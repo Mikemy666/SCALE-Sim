@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 from scalesim.memory.memdomain_experiment import Baseline, workload_digest
 from scalesim.memory.memdomain_runner import (
     RawBaselineExecution,
+    _atomic_noprefetch_config,
     load_runner_config,
     run_best_static_baseline_with_details,
     run_dominating_dynamic_baseline_with_details,
@@ -24,8 +25,13 @@ def write(path,rows):
     with path.open("w",newline="",encoding="utf-8") as f:
         w=csv.DictWriter(f,fieldnames=tuple(rows[0]));w.writeheader();w.writerows(rows)
 
-def export(config_path,output_dir):
-    config=load_runner_config(Path(config_path)); output_dir=Path(output_dir); by_chunk={c.chunk_id:c for c in config.chunks}
+def export_runner_config(config,output_dir,*,identity_payload=None,source_config=""):
+    """Export details for an already constructed RunnerConfig.
+
+    DATE3 uses this shared implementation after EP localization.  The default
+    DATE2 file entry remains unchanged.
+    """
+    output_dir=Path(output_dir); by_chunk={c.chunk_id:c for c in config.chunks}
     chunk_rows=[];bank_rows=[];request_rows=[];layer_acc=defaultdict(lambda:defaultdict(int));expert_acc=defaultdict(lambda:defaultdict(int)); selections=[]
     compiler_rows=list(config.payload.get("compiler_bank_plans",()))
     static_results={
@@ -72,10 +78,15 @@ def export(config_path,output_dir):
         executions[Baseline.MEMDOMAIN_SAFE]=safe
     for baseline in RAW:
         result=executions[baseline]
+        result_by_chunk=(
+            {c.chunk_id:c for c in _atomic_noprefetch_config(config).chunks}
+            if baseline in (Baseline.STATIC_NOPF,Baseline.DYNAMIC_NOPF)
+            else by_chunk
+        )
         selections.append({"baseline":baseline.value,"total_cycles":result.row.total_cycles,"candidate_source":result.row.candidate_source})
         services={s.request_id:s for s in result.memory_report.services}
         for item in result.chunks:
-            chunk=by_chunk[item.chunk_id]; service=services[f"load:{item.chunk_id}"]
+            chunk=result_by_chunk[item.chunk_id]; service=services[f"load:{item.chunk_id}"]
             row={"baseline":baseline.value,"chunk_id":item.chunk_id,"expert_id":chunk.expert_id,"ffn_part":chunk.ffn_part,"tile_id":chunk.tile_id,"size_bytes":chunk.size_bytes,
                  "planned_kind":item.planned_kind,"effective_kind":item.effective_kind,"planned_issue_cycle":item.planned_issue_cycle,"actual_issue_cycle":item.actual_issue_cycle,"completion_cycle":item.completion_cycle,
                  "mapping_latency_cycles":item.mapping_latency_cycles,"mapping_ready_cycle":item.mapping_ready_cycle,
@@ -107,15 +118,23 @@ def export(config_path,output_dir):
                 "static_baseline":static_name,"dynamic_baseline":dynamic_name,
                 "static_memory_penalty_cycles":static_penalty,"dynamic_memory_penalty_cycles":dynamic_penalty,
                 "delta_cycles":dynamic_penalty-static_penalty,"contract_pass":dynamic_penalty<=static_penalty})
-    prov=json.loads(Path(config_path).read_text()).get("topology_provenance",{}); counts=prov.get("token_counts",[])
+    payload=dict(identity_payload if identity_payload is not None else config.payload)
+    prov=payload.get("topology_provenance",{}); counts=prov.get("token_counts",[])
     input_rows=[{"expert_id":i,"tokens":v,"top_k":prov.get("top_k",1),"routing_mode":prov.get("routing_mode",""),"routing_severity":prov.get("routing_severity","")} for i,v in enumerate(counts)]
     write(output_dir/"CHUNK_REPORT.csv",chunk_rows);write(output_dir/"EXPERT_REPORT.csv",expert_rows);write(output_dir/"FFN_STAGE_REPORT.csv",layer_rows);write(output_dir/"LAYER_DOMINANCE_REPORT.csv",dominance_rows);write(output_dir/"BANK_REPORT.csv",bank_rows);write(output_dir/"REQUEST_REPORT.csv",request_rows);write(output_dir/"EXPERT_INPUT_REPORT.csv",input_rows);write(output_dir/"MEASURED_SELECTIONS.csv",selections);write(output_dir/"COMPILER_BANK_PLAN.csv",compiler_rows)
-    payload=json.loads(Path(config_path).read_text(encoding="utf-8"))
     (output_dir/"DETAILS_META.json").write_text(json.dumps({
         "schema_version":1,
         "workload_hash":workload_digest(payload),
-        "config":str(Path(config_path).resolve()),
+        "config":str(source_config),
     },indent=2)+"\n",encoding="utf-8")
+
+def export(config_path,output_dir):
+    config_path=Path(config_path)
+    payload=json.loads(config_path.read_text(encoding="utf-8"))
+    return export_runner_config(
+        load_runner_config(config_path),output_dir,
+        identity_payload=payload,source_config=str(config_path.resolve()),
+    )
 
 if __name__=="__main__":
     import argparse

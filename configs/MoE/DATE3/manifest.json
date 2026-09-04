@@ -1,0 +1,55 @@
+{
+  "date2_modified": false,
+  "ep_schema_version": 1,
+  "exp5_fixed_prefetch_selection": {
+    "calibration_traces": [
+      "light_seed40",
+      "high_seed41"
+    ],
+    "evaluation_trace": "MoDSE_base",
+    "protocol": "independent_calibration_then_freeze",
+    "selection_objective": "mean_normalized_cycles",
+    "static_and_dynamic_selected_independently": true,
+    "test_grid_role": "analysis_only_oracle",
+    "test_trace_visible_during_selection": false
+  },
+  "exp5_multi_layer": {
+    "controller_state": "persistent_across_layers",
+    "dynamic_fixed_reference": {
+      "chunk_tiles": 8,
+      "selection_hash": "19b0455ba7363bc6c49fd38ba1a6db87efe4dbfaf5283f2b03053f89f1ecd8f1",
+      "window": 2
+    },
+    "fixed_knobs": "frozen_across_complete_sequence",
+    "layer_count": 4,
+    "profiles": [
+      "balanced_t64",
+      "light40_t64",
+      "high41_t64",
+      "light42_t128"
+    ]
+  },
+  "name": "PIVOT Coverage/Accuracy-Constrained Prefetch",
+  "online_incumbent_guard": true,
+  "paper_experiments": {
+    "exp1": "layer_characterization",
+    "exp2": "static_bank_sweep",
+    "exp3": "naive_prefetch_interference",
+    "exp4": "dynamic_mapping_no_prefetch",
+    "exp5": "joint_prefetch",
+    "exp6": "robustness_factorial",
+    "exp7": "end_to_end"
+  },
+  "policy_name": "PIVOT",
+  "suites": {
+    "ablation": 8,
+    "end_to_end": 4,
+    "joint_prefetch": 32,
+    "overall": 4,
+    "prefetch_calibration": 56,
+    "quality_sensitivity": 19,
+    "robustness_factorial": 96,
+    "unit_cases": 1,
+    "window_chunk": 32
+  }
+}

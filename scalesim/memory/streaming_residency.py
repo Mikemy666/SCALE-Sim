@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import heapq
+import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Mapping, Optional, Tuple
 
 from scalesim.memory.chunk_residency import WeightChunk
@@ -28,14 +29,31 @@ class StreamingLoadPlan:
     load_kind: str
     preferred_banks: Tuple[int, ...] = ()
     mapping_latency_cycles: int = 0
+    # DATE3 opt-in lifetime controls.  DATE2 leaves both at their defaults and
+    # therefore retains its original consume-at-first-use behavior.
+    will_use: bool = True
+    eviction_cycle: Optional[int] = None
+    unused_release_cycle: Optional[int] = None
+    # Time from HBM request issue until the bytes reach the on-chip Bank
+    # ingress.  Kept separate from virtual-mapping latency so reports do not
+    # misclassify transfer time as address-translation overhead.
+    offchip_latency_cycles: int = 0
 
     def __post_init__(self) -> None:
         if (
             self.issue_cycle < 0
             or self.load_kind not in {"demand", "prefetch"}
             or self.mapping_latency_cycles < 0
+            or self.offchip_latency_cycles < 0
         ):
             raise ValueError("invalid streaming load plan")
+        if not self.will_use and self.load_kind != "prefetch":
+            raise ValueError("only a prefetch may be marked unused")
+        if self.eviction_cycle is not None and self.eviction_cycle < self.issue_cycle:
+            raise ValueError("eviction cannot precede issue")
+        if (self.unused_release_cycle is not None
+                and self.unused_release_cycle < self.issue_cycle):
+            raise ValueError("unused release cannot precede issue")
 
 
 @dataclass(frozen=True)
@@ -55,6 +73,12 @@ class StreamingChunkResult:
     physical_banks: Tuple[int, ...]
     mapping_latency_cycles: int = 0
     mapping_ready_cycle: int = 0
+    first_use_cycle: Optional[int] = None
+    eviction_cycle: Optional[int] = None
+    offchip_latency_cycles: int = 0
+    hbm_issue_cycle: int = 0
+    hbm_complete_cycle: int = 0
+    hbm_queue_wait_cycles: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +92,10 @@ class StreamingResidencyReport:
     demand_misses: int
     peak_occupied_bytes: int
     occupancy_byte_cycles: int
+    hbm_queue_wait_cycles: int
+    hbm_service_cycles: int
+    hbm_busy_cycles: int
+    hbm_max_queue_depth: int
 
 
 class StreamingResidencyEngine:
@@ -87,6 +115,7 @@ class StreamingResidencyEngine:
         compute_requests: Iterable[UnifiedMemoryRequest] = (),
         pressure: Optional[Mapping[int, BankPressure]] = None,
         dynamic_compute_mapping: bool = False,
+        bind_prefetched_weight_reads: bool = False,
     ) -> StreamingResidencyReport:
         plans = tuple(plans)
         compute_requests = tuple(compute_requests)
@@ -109,15 +138,58 @@ class StreamingResidencyEngine:
         releases = []
         results = []
         occupancy_byte_cycles = 0
+        # One configured off-chip bandwidth represents one shared HBM command
+        # and data channel.  Requests may be generated concurrently, but their
+        # startup+serialization service cannot overlap on that channel.
+        hbm_available_cycle = 0
+        hbm_pending_finishes = []
+        hbm_info = {}
+        hbm_service_cycles = 0
+        hbm_max_queue_depth = 0
         compute_remaining = Counter(
             request.object_id for request in compute_requests
         )
         compute_mappings = {}
+        resident_weight_banks = {}
+        planned_weight_banks = {}
+        if bind_prefetched_weight_reads:
+            for plan in plans:
+                identity = (plan.chunk.expert_id, plan.chunk.ffn_part)
+                candidates = (
+                    plan.preferred_banks
+                    or tuple(range(self.mapping.resources.bank_count))
+                )
+                planned_weight_banks.setdefault(identity, []).append(
+                    (plan.chunk.use_cycle, tuple(candidates))
+                )
+
+        def stage_identity(value: str):
+            match = re.search(r"(?:^|_)e(\d+)_ff([12])(?:_|$)", value)
+            return ((int(match.group(1)), int(match.group(2)))
+                    if match else None)
 
         def release_through(cycle: int) -> None:
             while releases and releases[0][0] <= cycle:
                 release_cycle, object_id = heapq.heappop(releases)
                 self.mapping.release(object_id, release_cycle)
+
+        def capacity_retry_cycle(cycle: int) -> Optional[int]:
+            """Return the next cycle at which allocation can make progress.
+
+            A live compute vBank is released only after its final request has
+            been submitted.  Consequently ``releases`` can legitimately be
+            empty while a later compute event will create the release.  The
+            old code treated that transient state as an unrecoverable capacity
+            failure.  Run the next pending event first, then retry one cycle
+            later; if a concrete release is already known, wait for it
+            directly.  Returning ``None`` is the only true deadlock case.
+            """
+            if releases:
+                return max(cycle + 1, releases[0][0])
+            if events:
+                next_event = min(item[0][0] for item in events)
+                return max(cycle + 1, next_event + 1)
+            return None
 
         while events:
             key, _, event_type, payload, original_issue = heapq.heappop(events)
@@ -125,6 +197,31 @@ class StreamingResidencyEngine:
             release_through(cycle)
             if event_type == "compute":
                 request = payload
+                identity = (
+                    stage_identity(request.object_id)
+                    or stage_identity(request.request_id)
+                )
+                if (
+                    bind_prefetched_weight_reads
+                    and request.tensor_type == "weight"
+                    and identity in planned_weight_banks
+                ):
+                    choices = resident_weight_banks.get(
+                        identity, planned_weight_banks[identity]
+                    )
+                    banks = min(
+                        choices,
+                        key=lambda item: (
+                            abs(item[0] - request.issue_cycle), item[0], item[1]
+                        ),
+                    )[1]
+                    group_size = request.bank_group_size or len(
+                        request.preferred_banks
+                    )
+                    if group_size:
+                        banks = banks[:min(group_size, len(banks))]
+                    session.submit(replace(request, preferred_banks=banks))
+                    continue
                 mapped_id = f"{request.tensor_type}:{request.object_id}"
                 if mapped_id not in compute_mappings:
                     group_size = request.bank_group_size or max(
@@ -154,13 +251,15 @@ class StreamingResidencyEngine:
                         )
                     except MemoryError:
                         # Capacity pressure is a scheduled wait, not a fatal
-                        # mapping failure reported to the paper.
+                        # mapping failure reported to the paper.  A release
+                        # may not be queued yet when the currently resident
+                        # object's final access is itself a future event.
                         self.mapping.allocation_failures -= 1
-                        if not releases:
+                        retry = capacity_retry_cycle(cycle)
+                        if retry is None:
                             raise MemoryError(
                                 f"compute allocation for {mapped_id} cannot make progress"
                             )
-                        retry = max(cycle + 1, releases[0][0])
                         retried = UnifiedMemoryRequest(
                             request.request_id, retry, request.tensor_type,
                             request.object_id, request.address,
@@ -189,8 +288,24 @@ class StreamingResidencyEngine:
 
             plan = payload
             chunk = plan.chunk
-            if event_type == "load" and plan.mapping_latency_cycles:
-                ready = cycle + plan.mapping_latency_cycles
+            if event_type == "load" and (
+                plan.mapping_latency_cycles or plan.offchip_latency_cycles
+            ):
+                while hbm_pending_finishes and hbm_pending_finishes[0] <= cycle:
+                    heapq.heappop(hbm_pending_finishes)
+                hbm_issue = max(cycle, hbm_available_cycle)
+                hbm_complete = hbm_issue + plan.offchip_latency_cycles
+                if plan.offchip_latency_cycles:
+                    hbm_available_cycle = hbm_complete
+                    heapq.heappush(hbm_pending_finishes, hbm_complete)
+                    hbm_service_cycles += plan.offchip_latency_cycles
+                    hbm_max_queue_depth = max(
+                        hbm_max_queue_depth, len(hbm_pending_finishes)
+                    )
+                hbm_info[plan.chunk.chunk_id] = (
+                    hbm_issue, hbm_complete, hbm_issue - cycle
+                )
+                ready = hbm_complete + plan.mapping_latency_cycles
                 ready_kind = "read" if ready >= chunk.use_cycle else (
                     "prefetch" if plan.load_kind == "prefetch" else "read"
                 )
@@ -222,11 +337,11 @@ class StreamingResidencyEngine:
                 )
             except MemoryError:
                 self.mapping.allocation_failures -= 1
-                if not releases:
+                retry = capacity_retry_cycle(cycle)
+                if retry is None:
                     raise MemoryError(
                         f"streaming allocation for {chunk.chunk_id} cannot make progress"
                     )
-                retry = max(cycle + 1, releases[0][0])
                 retry_kind = "read" if retry >= chunk.use_cycle else (
                     "prefetch" if plan.load_kind == "prefetch" else "read"
                 )
@@ -237,6 +352,16 @@ class StreamingResidencyEngine:
                 sequence += 1
                 continue
 
+            identity = (chunk.expert_id, chunk.ffn_part)
+            if (
+                bind_prefetched_weight_reads
+                and plan.load_kind == "prefetch"
+                and cycle < chunk.use_cycle
+            ):
+                resident_weight_banks.setdefault(identity, []).append(
+                    (chunk.use_cycle, record.physical_banks)
+                )
+
             request = self.mapping.make_request(
                 request_id=f"load:{chunk.chunk_id}",
                 object_id=obj.object_id,
@@ -246,11 +371,34 @@ class StreamingResidencyEngine:
                 kind="prefetch" if effective_kind == "prefetch" else "read",
             )
             service: RequestService = session.submit(request)
-            consume = max(chunk.use_cycle, service.completion_cycle)
-            release = consume
+            evicted_before_use = (
+                plan.eviction_cycle is not None
+                and plan.eviction_cycle < chunk.use_cycle
+            )
+            if not plan.will_use:
+                consume = service.completion_cycle
+                release = max(
+                    service.completion_cycle,
+                    plan.unused_release_cycle
+                    if plan.unused_release_cycle is not None
+                    else chunk.use_cycle,
+                )
+            elif evicted_before_use:
+                consume = max(service.completion_cycle, int(plan.eviction_cycle))
+                release = consume
+            else:
+                consume = max(chunk.use_cycle, service.completion_cycle)
+                release = consume
             heapq.heappush(releases, (release, obj.object_id))
-            stall = max(0, service.completion_cycle - chunk.use_cycle)
-            if effective_kind == "demand":
+            stall = (
+                max(0, service.completion_cycle - chunk.use_cycle)
+                if plan.will_use and not evicted_before_use else 0
+            )
+            if not plan.will_use:
+                classification = "unused"
+            elif evicted_before_use:
+                classification = "evicted_before_use"
+            elif effective_kind == "demand":
                 classification = "demand_miss"
             else:
                 classification = "timely" if service.completion_cycle <= chunk.use_cycle else "late"
@@ -272,6 +420,18 @@ class StreamingResidencyEngine:
                 mapping_ready_cycle=(
                     int(original_issue) + plan.mapping_latency_cycles
                 ),
+                first_use_cycle=chunk.use_cycle if plan.will_use else None,
+                eviction_cycle=plan.eviction_cycle,
+                offchip_latency_cycles=plan.offchip_latency_cycles,
+                hbm_issue_cycle=hbm_info.get(
+                    chunk.chunk_id, (int(original_issue), int(original_issue), 0)
+                )[0],
+                hbm_complete_cycle=hbm_info.get(
+                    chunk.chunk_id, (int(original_issue), int(original_issue), 0)
+                )[1],
+                hbm_queue_wait_cycles=hbm_info.get(
+                    chunk.chunk_id, (int(original_issue), int(original_issue), 0)
+                )[2],
             ))
             occupancy_byte_cycles += chunk.size_bytes * (release - cycle)
 
@@ -290,4 +450,10 @@ class StreamingResidencyEngine:
             demand_misses=sum(item.classification == "demand_miss" for item in results),
             peak_occupied_bytes=self.mapping.statistics().peak_occupied_bytes,
             occupancy_byte_cycles=occupancy_byte_cycles,
+            hbm_queue_wait_cycles=sum(
+                item.hbm_queue_wait_cycles for item in results
+            ),
+            hbm_service_cycles=hbm_service_cycles,
+            hbm_busy_cycles=hbm_service_cycles,
+            hbm_max_queue_depth=hbm_max_queue_depth,
         )

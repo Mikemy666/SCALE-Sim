@@ -1,0 +1,27 @@
+{
+  "ep_degree": 1,
+  "experiment_id": "date3-exp1-characterization",
+  "hardware": {
+    "bandwidth_bytes_per_cycle": 480,
+    "bank_count": 30,
+    "bank_entries": 128,
+    "bank_width_bits": 128,
+    "ports_per_bank": 1,
+    "request_buffer_depth": 32
+  },
+  "precision": {
+    "accumulator": "INT32",
+    "ia": "INT8",
+    "model": "FP32",
+    "oa": "INT8",
+    "weight": "INT8"
+  },
+  "purpose": "fixed_SP_ACC_boundary_and_layer_bottleneck",
+  "static_acc_banks": 15,
+  "static_sp_banks": [
+    5,
+    5,
+    5
+  ],
+  "topology": "topologies/MoE/DATE3/models/MoDSE.csv"
+}

@@ -85,6 +85,24 @@ class UnifiedBankSessionTests(unittest.TestCase):
         # illegally byte-packing compute and prefetch objects into one pBank.
         self.assertGreater(report.allocation_wait_cycles, 0)
 
+    def test_compute_waits_for_a_release_created_by_a_future_access(self):
+        resources = ResourceBudget(1, 128, 16, 1, 4)
+        engine = StreamingResidencyEngine(
+            UnifiedBankDomain(resources, 16), VirtualBankMappingTable(resources)
+        )
+        compute = [
+            # Object a owns the only exclusive vBank.  Its release cannot be
+            # queued until this final access at cycle 10 is processed.
+            UnifiedMemoryRequest("a0", 0, "ia", "a", 0, 16),
+            UnifiedMemoryRequest("b0", 1, "accumulator", "b", 0, 16,
+                                 "write", wmode=1, bank_group_size=1),
+            UnifiedMemoryRequest("a1", 10, "ia", "a", 16, 16),
+        ]
+        report = engine.run([], compute, dynamic_compute_mapping=True)
+        services = {item.request_id: item for item in report.memory_report.services}
+        self.assertGreater(services["b0"].issue_cycle, 10)
+        self.assertEqual(engine.mapping.statistics().occupied_bytes, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

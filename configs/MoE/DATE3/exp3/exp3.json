@@ -1,0 +1,21 @@
+{
+  "chunk_tiles": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "experiment_id": "date3-exp3-naive_prefetch_pathology",
+  "purpose": "fixed_prefetch_timeliness_interference",
+  "source_suite": "configs/MoE/DATE3/window_chunk",
+  "windows": [
+    0,
+    1,
+    2,
+    4,
+    8,
+    16,
+    32,
+    64
+  ]
+}

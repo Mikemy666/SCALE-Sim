@@ -1,0 +1,94 @@
+{
+  "architecture": "MemDomain",
+  "cycle_contract": [
+    "compute_cycles",
+    "bank_stall_cycles",
+    "weight_load_stall_cycles",
+    "prefetch_miss_stall_cycles",
+    "prefetch_interference_stall_cycles",
+    "mapping_overhead_cycles",
+    "communication_stall_cycles",
+    "other_stall_cycles"
+  ],
+  "expert_parallel": {
+    "default_num_npus": 2,
+    "detailed_npu_model": "cycle_level_unified_bank",
+    "peer_npu_model": "analytical_owner_local",
+    "route_granularity": "token_topk_replica",
+    "system_completion": "max_detailed_peer_then_combine"
+  },
+  "inherits": "DATE2 unified Bank domain",
+  "name": "PIVOT",
+  "paper_control_contract": {
+    "ideal_is_reference_only": true,
+    "mapping_only": [
+      "Static-555-NoPF",
+      "Static-Opt-NoPF",
+      "Dynamic-NoPF",
+      "Ideal-NoPF"
+    ],
+    "prefetch_enabled": [
+      "Static-555-NoPF",
+      "Static-Opt-NoPF",
+      "Dynamic-NoPF",
+      "Static-Opt-FixedPF",
+      "Dynamic-FixedPF",
+      "PIVOT"
+    ]
+  },
+  "policy": {
+    "adaptation_cooldown": 1,
+    "adaptation_epoch": 1,
+    "bank_candidate_count": 4,
+    "base_safety_margin": 2.0,
+    "candidate_chunks": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "candidate_windows": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "ema_warmup_epochs": 2,
+    "enabled": true,
+    "epsilon_accuracy": 0.05,
+    "epsilon_coverage": 0.05,
+    "eta_accuracy": 0.25,
+    "eta_coverage": 0.25,
+    "max_chunk_step": 1,
+    "max_residency_ratio": 0.85,
+    "max_window_step": 2,
+    "min_accuracy": 0.5,
+    "min_coverage": 0.45,
+    "minimum_positive_score": -1.0,
+    "online_incumbent_guard": true,
+    "pressure_mode": "mean_max",
+    "pressure_threshold": 0.9,
+    "pressure_weights": {
+      "busy": 0.25,
+      "conflict": 0.25,
+      "queue": 0.3,
+      "residency": 0.2
+    },
+    "reference_chunk": 4,
+    "reference_mode": "shadow_fixed",
+    "reference_window": 8,
+    "score_hysteresis": 0.02,
+    "score_weights": {
+      "conflict": 0.15,
+      "latency": 1.0,
+      "mapping": 0.05,
+      "occupancy": 0.2,
+      "pressure": 0.2
+    },
+    "severe_late_ratio": 0.5,
+    "timing_margin_scale": 0.25
+  }
+}
